@@ -76,6 +76,24 @@ Make the switch to Fossify Messages and experience messaging the way it should b
   uses the original gray exactly as before, for anyone who turns the gel
   theme off.
 
+- **Bubble hue slider - shifts both colors together.** A quick "shift the
+  whole conversation's color mood" `SeekBar` (0-360°, default 0), separate
+  from and complementary to the two precise color pickers above - a hue
+  slider can't out-precision an exact color picker for one already-
+  arbitrary color, so this exists for fast coordinated shifts, not fine
+  control. Applied via real `Color.colorToHSV`/`HSVToColor` inside
+  `createGelBubbleDrawable()` itself, so every caller stays in sync
+  automatically. Fixed a real correctness issue while wiring it in:
+  `ThreadAdapter` was computing each bubble's text contrast color from the
+  pre-shift color while the bubble rendered the shifted one - hue rotation
+  preserves saturation/value exactly, but perceived brightness isn't
+  purely a function of value (yellow reads brighter than blue at the same
+  value), so a shift could actually create a text/background readability
+  mismatch, not just a theoretical one. Both sent and received contrast
+  colors now go through the same effective-color function the drawable
+  itself uses. Live preview in Settings renders both bubbles with the
+  real `createGelBubbleDrawable()`, not an approximation.
+
   Kept the same asymmetric tail-corner shape as the existing
   `item_sent_background`/`item_received_background` drawables (sharp
   bottom-right for sent, sharp bottom-left for received), so this reads as
