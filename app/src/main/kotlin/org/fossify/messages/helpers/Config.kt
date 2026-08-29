@@ -159,4 +159,12 @@ class Config(context: Context) : BaseConfig(context) {
         get() = prefs.getBoolean(GEL_BUBBLE_THEME, true)
         set(gelBubbleTheme) = prefs.edit()
             .putBoolean(GEL_BUBBLE_THEME, gelBubbleTheme).apply()
+
+    // Default matches the original hardcoded gel_bubble_received_color resource
+    // (#0EA5E9) exactly, so existing users see no change until they actually open
+    // the color picker and choose something else.
+    var gelBubbleReceivedColor: Int
+        get() = prefs.getInt(GEL_BUBBLE_RECEIVED_COLOR, DEFAULT_GEL_BUBBLE_RECEIVED_COLOR)
+        set(gelBubbleReceivedColor) = prefs.edit()
+            .putInt(GEL_BUBBLE_RECEIVED_COLOR, gelBubbleReceivedColor).apply()
 }

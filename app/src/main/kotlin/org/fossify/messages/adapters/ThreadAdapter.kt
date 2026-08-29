@@ -428,7 +428,7 @@ class ThreadAdapter(
 
             threadMessageBody.apply {
                 if (activity.config.gelBubbleTheme) {
-                    val baseColor = activity.getColor(R.color.gel_bubble_received_color)
+                    val baseColor = activity.config.gelBubbleReceivedColor
                     val receivedContrastColor = baseColor.getContrastColor()
                     background = activity.createGelBubbleDrawable(baseColor, isSent = false)
                     setTextColor(receivedContrastColor)

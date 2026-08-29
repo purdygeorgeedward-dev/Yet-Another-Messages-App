@@ -5,11 +5,13 @@ import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import org.fossify.commons.activities.ManageBlockedNumbersActivity
 import org.fossify.commons.dialogs.ChangeDateTimeFormatDialog
+import org.fossify.commons.dialogs.ColorPickerDialog
 import org.fossify.commons.dialogs.ConfirmationDialog
 import org.fossify.commons.dialogs.FeatureLockedDialog
 import org.fossify.commons.dialogs.RadioGroupDialog
 import org.fossify.commons.dialogs.SecurityDialog
 import org.fossify.commons.extensions.addLockedLabelIfNeeded
+import org.fossify.commons.extensions.applyColorFilter
 import org.fossify.commons.extensions.beGone
 import org.fossify.commons.extensions.beVisible
 import org.fossify.commons.extensions.beVisibleIf
@@ -116,6 +118,7 @@ class SettingsActivity : SimpleActivity() {
         setupGroupMessageAsMMS()
         setupKeepConversationsArchived()
         setupGelBubbleTheme()
+        setupGelBubbleReceivedColor()
         setupLockScreenVisibility()
         setupMMSFileSizeLimit()
         setupUseRecycleBin()
@@ -320,6 +323,18 @@ class SettingsActivity : SimpleActivity() {
         settingsGelBubbleThemeHolder.setOnClickListener {
             settingsGelBubbleTheme.toggle()
             config.gelBubbleTheme = settingsGelBubbleTheme.isChecked
+        }
+    }
+
+    private fun setupGelBubbleReceivedColor() = binding.apply {
+        settingsGelBubbleReceivedColorSwatch.background.applyColorFilter(config.gelBubbleReceivedColor)
+        settingsGelBubbleReceivedColorHolder.setOnClickListener {
+            ColorPickerDialog(this@SettingsActivity, config.gelBubbleReceivedColor) { wasPositivePressed, color ->
+                if (wasPositivePressed) {
+                    config.gelBubbleReceivedColor = color
+                    settingsGelBubbleReceivedColorSwatch.background.applyColorFilter(color)
+                }
+            }
         }
     }
 

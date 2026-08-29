@@ -69,6 +69,7 @@
     <string name="empty_archive_confirmation">Are you sure you want to empty the archive? All archived conversations will be permanently lost.</string>
     <string name="keep_conversations_archived">Keep conversations archived</string>
     <string name="gel_bubble_theme">Glossy gel bubble theme</string>
+    <string name="gel_bubble_received_color">Received bubble color</string>
     <!-- Recycle bin -->
     <string name="restore">Restore</string>
     <string name="restore_all_messages">Restore all messages</string>
