@@ -63,6 +63,7 @@ import org.fossify.messages.dialogs.DeleteConfirmationDialog
 import org.fossify.messages.dialogs.MessageDetailsDialog
 import org.fossify.messages.dialogs.SelectTextDialog
 import org.fossify.messages.extensions.config
+import org.fossify.messages.extensions.createGelBubbleDrawable
 import org.fossify.messages.extensions.getContactFromAddress
 import org.fossify.messages.extensions.isImageMimeType
 import org.fossify.messages.extensions.isVCardMimeType
@@ -426,7 +427,12 @@ class ThreadAdapter(
             }
 
             threadMessageBody.apply {
-                background = AppCompatResources.getDrawable(activity, R.drawable.item_received_background)
+                background = if (activity.config.gelBubbleTheme) {
+                    val baseColor = activity.getColor(org.fossify.commons.R.color.activated_item_foreground)
+                    activity.createGelBubbleDrawable(baseColor, isSent = false)
+                } else {
+                    AppCompatResources.getDrawable(activity, R.drawable.item_received_background)
+                }
                 setTextColor(textColor)
                 setLinkTextColor(activity.getProperPrimaryColor())
             }
@@ -468,8 +474,12 @@ class ThreadAdapter(
                     addRule(RelativeLayout.ALIGN_PARENT_END)
                 }
 
-                background = AppCompatResources.getDrawable(activity, R.drawable.item_sent_background)
-                background.applyColorFilter(primaryColor)
+                if (activity.config.gelBubbleTheme) {
+                    background = activity.createGelBubbleDrawable(primaryColor, isSent = true)
+                } else {
+                    background = AppCompatResources.getDrawable(activity, R.drawable.item_sent_background)
+                    background.applyColorFilter(primaryColor)
+                }
                 setTextColor(contrastColor)
                 setLinkTextColor(contrastColor)
 

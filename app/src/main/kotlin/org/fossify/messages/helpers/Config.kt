@@ -151,4 +151,11 @@ class Config(context: Context) : BaseConfig(context) {
         get() = prefs.getBoolean(KEEP_CONVERSATIONS_ARCHIVED, false)
         set(keepConversationsArchived) = prefs.edit()
             .putBoolean(KEEP_CONVERSATIONS_ARCHIVED, keepConversationsArchived).apply()
+
+    // Opt-in (default false): the existing flat bubble look stays the
+    // default for anyone who doesn't turn this on.
+    var gelBubbleTheme: Boolean
+        get() = prefs.getBoolean(GEL_BUBBLE_THEME, false)
+        set(gelBubbleTheme) = prefs.edit()
+            .putBoolean(GEL_BUBBLE_THEME, gelBubbleTheme).apply()
 }

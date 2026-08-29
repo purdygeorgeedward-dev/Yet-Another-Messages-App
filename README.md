@@ -42,3 +42,41 @@ Make the switch to Fossify Messages and experience messaging the way it should b
 <img alt="App image" src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_en-US.png" width="30%">
 </div>
 
+---
+
+## Fork changes (Yet-Another-Messages-App)
+
+- **Glossy "gel bubble" message theme** - an opt-in visual style (Settings >
+  "Glossy gel bubble theme", off by default) that renders message bubbles
+  with a top-to-bottom gradient, a darker rim, and a soft specular
+  highlight near the top, instead of the existing flat fill. Built entirely
+  from `GradientDrawable`/`LayerDrawable` (`extensions/GelBubble.kt`) - no
+  bitmap assets, so it works at any bubble size and reflows correctly with
+  variable message lengths. Uses Fossify Commons' own `Int.lightenColor()`/
+  `Int.darkenColor()` (confirmed against the real Commons source, not
+  reimplemented) to derive the gradient and rim tones from a single base
+  color, so it layers on top of - not instead of - the app's existing color
+  customization: sent bubbles still use the user's chosen primary color,
+  received bubbles still use the existing translucent gray
+  (`activated_item_foreground`), exactly as the flat style already does.
+  The received bubble's semi-transparency is preserved deliberately, not
+  "fixed" to opaque - that's the pre-existing design (letting it read
+  correctly against both light and dark themes), and this feature only
+  changes how a color renders, not which colors get used.
+
+  Kept the same asymmetric tail-corner shape as the existing
+  `item_sent_background`/`item_received_background` drawables (sharp
+  bottom-right for sent, sharp bottom-left for received), so this reads as
+  a finish change, not a shape change.
+
+  **Not verified on a real device** - reasoned from the actual
+  `GradientDrawable`/`LayerDrawable` API contracts and confirmed this app's
+  `minSdk` (26) comfortably covers every API used (`setLayerSize`/
+  `setLayerGravity` need API 21), but not confirmed against a live render,
+  since this environment has neither a device nor an emulator.
+
+- **Scope note on theming more broadly:** this is one concrete, finished
+  feature for this app. Extending "pretty, customizable themes" further -
+  a broader theme-picker system, or gel/gradient treatments in other
+  Yet-Another apps - is real, separate design and implementation work per
+  app, not something this pass attempted to do all at once.

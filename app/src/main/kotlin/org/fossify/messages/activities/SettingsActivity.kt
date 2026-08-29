@@ -115,6 +115,7 @@ class SettingsActivity : SimpleActivity() {
         setupSendLongMessageAsMMS()
         setupGroupMessageAsMMS()
         setupKeepConversationsArchived()
+        setupGelBubbleTheme()
         setupLockScreenVisibility()
         setupMMSFileSizeLimit()
         setupUseRecycleBin()
@@ -311,6 +312,14 @@ class SettingsActivity : SimpleActivity() {
         settingsKeepConversationsArchivedHolder.setOnClickListener {
             settingsKeepConversationsArchived.toggle()
             config.keepConversationsArchived = settingsKeepConversationsArchived.isChecked
+        }
+    }
+
+    private fun setupGelBubbleTheme() = binding.apply {
+        settingsGelBubbleTheme.isChecked = config.gelBubbleTheme
+        settingsGelBubbleThemeHolder.setOnClickListener {
+            settingsGelBubbleTheme.toggle()
+            config.gelBubbleTheme = settingsGelBubbleTheme.isChecked
         }
     }
 
