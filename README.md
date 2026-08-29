@@ -89,3 +89,23 @@ Make the switch to Fossify Messages and experience messaging the way it should b
   Yet-Another apps - is real, separate design and implementation work per
   app. Contacts' contact-list avatars got the same gel treatment as a
   second, similarly-scoped piece of work - see that app's own README.
+
+- **Bugfix pass: investigated, no changes made.** Checked for the
+  ViewPager-tab-recycle leak pattern found in Yet-Another-Voice-Recorder -
+  doesn't apply here, this app navigates via real Activities
+  (`ThreadActivity`, `MainActivity`), not a `PagerAdapter`, and
+  `ThreadActivity`'s own `EventBus` register/unregister is correctly
+  paired to real `onCreate()`/`onDestroy()`. Checked conversation search
+  for the same missing-debounce issue found in Contacts - this one is
+  already well-implemented: properly backgrounded via
+  `ensureBackgroundThread`, plus a manual stale-response guard
+  (`text == lastSearchedText`) that discards out-of-order results from a
+  superseded search. Checked `notifyDataSetChanged()` usage across the
+  conversation list adapters - the two in `BaseConversationsAdapter` are
+  both explicitly `@SuppressLint("NotifyDataSetChanged")`-annotated by the
+  original maintainers for genuinely uniform changes (font size, an
+  infrequent draft-map update with its own change guard), and the actual
+  hot path (`updateConversations()`) already correctly uses `submitList()`/
+  `DiffUtil`. A third usage in `MainActivity` traces to an infrequent,
+  user-action-triggered refresh callback, not an auto-refresh loop -
+  didn't find strong evidence it's a real problem worth touching.
