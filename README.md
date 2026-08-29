@@ -109,3 +109,23 @@ Make the switch to Fossify Messages and experience messaging the way it should b
   `DiffUtil`. A third usage in `MainActivity` traces to an infrequent,
   user-action-triggered refresh callback, not an auto-refresh loop -
   didn't find strong evidence it's a real problem worth touching.
+
+- **Second bugfix pass: found and fixed a real one.** Different code paths
+  than the first pass - manual `Cursor`/receiver/`Handler`/coroutine-scope
+  resource management (all clean: cursors consistently use `.use {}`, no
+  unpaired `registerReceiver`, no retained `Handler` references, no
+  `GlobalScope` misuse) - then image attachment handling, where
+  `ImageCompressor.loadBitmap()` decoded whatever the user attached at
+  full native resolution with no bounds checking or `inSampleSize` at all,
+  in a function that's only ever reached when the file is *already* known
+  to be larger than the target compress size - meaning it's routinely
+  handed modern smartphone photos (12-100+ MP is normal now) and can
+  allocate several hundred MB to over a gigabyte decoding one, risking a
+  genuine `OutOfMemoryError` crash before compression even starts. Fixed
+  by reusing `decodeSampledBitmapFromFile()` - already-correct, already
+  in this file, previously only exercised on retry passes - on the first
+  decode too, capped at a 2048px long edge. Also stopped
+  `determineImageRotation()` making a redundant full-size `Bitmap` copy
+  when EXIF orientation needs no rotation at all. Confirmed reachable, not
+  theoretical: traced to `AttachmentsAdapter`, the real
+  attach-a-photo-to-a-text path.
