@@ -46,23 +46,31 @@ Make the switch to Fossify Messages and experience messaging the way it should b
 
 ## Fork changes (Yet-Another-Messages-App)
 
-- **Glossy "gel bubble" message theme** - an opt-in visual style (Settings >
-  "Glossy gel bubble theme", off by default) that renders message bubbles
-  with a top-to-bottom gradient, a darker rim, and a soft specular
-  highlight near the top, instead of the existing flat fill. Built entirely
-  from `GradientDrawable`/`LayerDrawable` (`extensions/GelBubble.kt`) - no
-  bitmap assets, so it works at any bubble size and reflows correctly with
-  variable message lengths. Uses Fossify Commons' own `Int.lightenColor()`/
-  `Int.darkenColor()` (confirmed against the real Commons source, not
-  reimplemented) to derive the gradient and rim tones from a single base
-  color, so it layers on top of - not instead of - the app's existing color
-  customization: sent bubbles still use the user's chosen primary color,
-  received bubbles still use the existing translucent gray
-  (`activated_item_foreground`), exactly as the flat style already does.
-  The received bubble's semi-transparency is preserved deliberately, not
-  "fixed" to opaque - that's the pre-existing design (letting it read
-  correctly against both light and dark themes), and this feature only
-  changes how a color renders, not which colors get used.
+- **Glossy "gel bubble" message theme** - **on by default** (Settings >
+  "Glossy gel bubble theme", still a real toggle for anyone who wants the
+  flat style back) - renders message bubbles with a top-to-bottom gradient,
+  a darker rim, and a soft specular highlight near the top, instead of a
+  flat fill. Built entirely from `GradientDrawable`/`LayerDrawable`
+  (`extensions/GelBubble.kt`) - no bitmap assets, so it works at any bubble
+  size and reflows correctly with variable message lengths. Uses Fossify
+  Commons' own `Int.lightenColor()`/`Int.darkenColor()` (confirmed against
+  the real Commons source, not reimplemented) to derive the gradient and
+  rim tones from a single base color.
+
+  Sent bubbles still use the user's chosen primary color - this feature
+  changes how that color renders, not which color gets used, so existing
+  color customization stays intact. Received bubbles previously used a
+  semi-transparent neutral gray (`activated_item_foreground`); replaced
+  with a vivid, opaque sky-blue/teal (`gel_bubble_received_color`,
+  `#0EA5E9`) for the gel theme specifically, since the original gray reads
+  as utilitarian rather than "pretty." Because that color is now opaque and
+  saturated rather than a theme-adaptive translucent gray, its text can't
+  safely rely on the app's fixed theme text color anymore - so the received
+  bubble now computes its own contrast-safe text color from this color the
+  same way the sent bubble already does from the primary color, rather
+  than introducing a readability risk in light or dark theme. The flat
+  (non-gel) style is untouched and still uses the original gray exactly as
+  before, for anyone who turns the gel theme off.
 
   Kept the same asymmetric tail-corner shape as the existing
   `item_sent_background`/`item_received_background` drawables (sharp
@@ -79,4 +87,5 @@ Make the switch to Fossify Messages and experience messaging the way it should b
   feature for this app. Extending "pretty, customizable themes" further -
   a broader theme-picker system, or gel/gradient treatments in other
   Yet-Another apps - is real, separate design and implementation work per
-  app, not something this pass attempted to do all at once.
+  app. Contacts' contact-list avatars got the same gel treatment as a
+  second, similarly-scoped piece of work - see that app's own README.

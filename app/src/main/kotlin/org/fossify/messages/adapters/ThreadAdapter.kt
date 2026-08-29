@@ -427,14 +427,17 @@ class ThreadAdapter(
             }
 
             threadMessageBody.apply {
-                background = if (activity.config.gelBubbleTheme) {
-                    val baseColor = activity.getColor(org.fossify.commons.R.color.activated_item_foreground)
-                    activity.createGelBubbleDrawable(baseColor, isSent = false)
+                if (activity.config.gelBubbleTheme) {
+                    val baseColor = activity.getColor(R.color.gel_bubble_received_color)
+                    val receivedContrastColor = baseColor.getContrastColor()
+                    background = activity.createGelBubbleDrawable(baseColor, isSent = false)
+                    setTextColor(receivedContrastColor)
+                    setLinkTextColor(receivedContrastColor)
                 } else {
-                    AppCompatResources.getDrawable(activity, R.drawable.item_received_background)
+                    background = AppCompatResources.getDrawable(activity, R.drawable.item_received_background)
+                    setTextColor(textColor)
+                    setLinkTextColor(activity.getProperPrimaryColor())
                 }
-                setTextColor(textColor)
-                setLinkTextColor(activity.getProperPrimaryColor())
             }
 
             if (!activity.isFinishing && !activity.isDestroyed) {

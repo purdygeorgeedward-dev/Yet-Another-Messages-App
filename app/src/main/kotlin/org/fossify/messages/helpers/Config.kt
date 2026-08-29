@@ -152,10 +152,11 @@ class Config(context: Context) : BaseConfig(context) {
         set(keepConversationsArchived) = prefs.edit()
             .putBoolean(KEEP_CONVERSATIONS_ARCHIVED, keepConversationsArchived).apply()
 
-    // Opt-in (default false): the existing flat bubble look stays the
-    // default for anyone who doesn't turn this on.
+    // On by default - the glossy gel look is the intended default
+    // appearance now. Still a real toggle for anyone who wants the flat
+    // style back.
     var gelBubbleTheme: Boolean
-        get() = prefs.getBoolean(GEL_BUBBLE_THEME, false)
+        get() = prefs.getBoolean(GEL_BUBBLE_THEME, true)
         set(gelBubbleTheme) = prefs.edit()
             .putBoolean(GEL_BUBBLE_THEME, gelBubbleTheme).apply()
 }

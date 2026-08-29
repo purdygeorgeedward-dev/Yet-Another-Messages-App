@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
+    <!-- A vivid, glossy sky-blue/teal for the gel bubble theme's received
+         messages - Aqua-era Mac OS style, meant to actually look colorful
+         rather than the existing neutral gray. Used as an opaque base
+         color (unlike activated_item_foreground, which is semi-
+         transparent), so its own contrast-safe text color is computed the
+         same way the sent bubble already computes one from the user's
+         primary color, rather than relying on the theme-wide text color. -->
+    <color name="gel_bubble_received_color">#0EA5E9</color>
 </resources>
