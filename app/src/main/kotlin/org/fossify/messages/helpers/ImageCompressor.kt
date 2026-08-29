@@ -117,18 +117,38 @@ class ImageCompressor(private val context: Context) {
         }
     }
 
-    private fun loadBitmap(imageFile: File) = BitmapFactory.decodeFile(imageFile.absolutePath).run {
-        determineImageRotation(imageFile, this)
+    // Was: BitmapFactory.decodeFile(imageFile.absolutePath) with no bounds/inSampleSize
+    // at all - a full, un-downsampled decode of whatever the user attached. This is
+    // the compress-image path, only reached when the file is already known to be
+    // larger than the target size (fileSize > compressSize above), so it's routinely
+    // handed modern smartphone photos (12-100+ MP) - decoding one of those at full
+    // resolution into an ARGB_8888 bitmap can allocate several hundred MB and crash
+    // with OutOfMemoryError before this function even gets to compress anything.
+    // decodeSampledBitmapFromFile() below already exists and is exercised correctly
+    // on retry passes; using it here too means the very first attempt is safe rather
+    // than only the fallback ones.
+    private fun loadBitmap(imageFile: File): Bitmap {
+        val bitmap = decodeSampledBitmapFromFile(imageFile, MAX_INITIAL_DECODE_DIMENSION, MAX_INITIAL_DECODE_DIMENSION)
+        return determineImageRotation(imageFile, bitmap)
     }
 
     private fun determineImageRotation(imageFile: File, bitmap: Bitmap): Bitmap {
         val exif = ExifInterface(imageFile.absolutePath)
         val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, 0)
+        // No rotation needed - avoid Bitmap.createBitmap's full copy (a second
+        // full-size allocation held alongside the first) when there's nothing to do.
+        if (orientation != ExifInterface.ORIENTATION_ROTATE_90 &&
+            orientation != ExifInterface.ORIENTATION_ROTATE_180 &&
+            orientation != ExifInterface.ORIENTATION_ROTATE_270
+        ) {
+            return bitmap
+        }
+
         val matrix = Matrix()
         when (orientation) {
-            6 -> matrix.postRotate(90f)
-            3 -> matrix.postRotate(180f)
-            8 -> matrix.postRotate(270f)
+            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
         }
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
@@ -164,5 +184,13 @@ class ImageCompressor(private val context: Context) {
         }
 
         return inSampleSize
+    }
+
+    companion object {
+        // Long-edge cap for the very first decode in loadBitmap(). Generous enough
+        // that MMS-quality compression still has real detail to work with, small
+        // enough that even a 100+ MP source photo decodes to a bounded, safe
+        // allocation instead of its native resolution.
+        private const val MAX_INITIAL_DECODE_DIMENSION = 2048
     }
 }
