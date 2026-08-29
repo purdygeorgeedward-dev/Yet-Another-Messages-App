@@ -63,14 +63,18 @@ Make the switch to Fossify Messages and experience messaging the way it should b
   semi-transparent neutral gray (`activated_item_foreground`); replaced
   with a vivid, opaque sky-blue/teal (`gel_bubble_received_color`,
   `#0EA5E9`) for the gel theme specifically, since the original gray reads
-  as utilitarian rather than "pretty." Because that color is now opaque and
-  saturated rather than a theme-adaptive translucent gray, its text can't
-  safely rely on the app's fixed theme text color anymore - so the received
-  bubble now computes its own contrast-safe text color from this color the
-  same way the sent bubble already does from the primary color, rather
-  than introducing a readability risk in light or dark theme. The flat
-  (non-gel) style is untouched and still uses the original gray exactly as
-  before, for anyone who turns the gel theme off.
+  as utilitarian rather than "pretty." **Now user-customizable** too -
+  Settings has a "Received bubble color" row with a real color picker,
+  defaulting to that same teal so nothing changes until it's actually
+  touched. Because that color can be arbitrary now, not just a fixed
+  theme-adaptive gray, its text can't safely rely on the app's fixed theme
+  text color - the received bubble computes its own contrast-safe text
+  color from whatever color is picked, the same way the sent bubble
+  already does from the primary color, so picking a very light or very
+  dark received color doesn't create a readability problem in either
+  light or dark theme. The flat (non-gel) style is untouched and still
+  uses the original gray exactly as before, for anyone who turns the gel
+  theme off.
 
   Kept the same asymmetric tail-corner shape as the existing
   `item_sent_background`/`item_received_background` drawables (sharp
@@ -129,3 +133,55 @@ Make the switch to Fossify Messages and experience messaging the way it should b
   when EXIF orientation needs no rotation at all. Confirmed reachable, not
   theoretical: traced to `AttachmentsAdapter`, the real
   attach-a-photo-to-a-text path.
+
+## Suggested features (not implemented - suggestions only, with difficulty)
+
+Grounded in what's actually in this codebase already (checked, not guessed) -
+so this skips things that exist (scheduled messages, per-app color
+customization, message search) and things SMS/MMS genuinely can't support
+(see the two flagged Infeasible below).
+
+- **Easy: dark/light gel palette variant.** `GelBubble.kt` derives every
+  tone from one base color already - a second palette style (e.g. more
+  saturated vs. more muted) is a parameter on the same function, not new
+  architecture.
+- **Easy: gradient conversation background.** Same `lightenColor`/
+  `darkenColor` technique the gel bubbles already use, applied to the
+  thread's `RecyclerView` background instead of each bubble. Direct
+  extension of code that already exists and is already verified against
+  the real Commons source.
+- **Easy-moderate: quick reply / canned response chips.** A
+  Settings-managed list of short strings, shown as suggestion chips above
+  the keyboard in `ThreadActivity`. No new permissions, no new data model
+  beyond a simple string list in `Config`.
+- **Moderate: message reactions (tap-and-hold, local emoji reaction).**
+  Needs a new small table or column keyed by message id, plus a reaction
+  badge overlaid on the bubble in `ThreadAdapter`. Fully local, no new
+  permissions - the real cost is the DB migration and the overlay
+  positioning on a bubble that already has custom shape/gradient.
+- **Moderate: per-contact bubble color.** Currently one global received
+  color (or one gel base color). Making it per-conversation means a new
+  address→color map (small DB table or a JSON-backed pref) rather than a
+  single `Config` value, plus a color-picker entry point from the
+  conversation details screen. More data-model work than UI work.
+- **Moderate: recurring scheduled messages.** `ScheduleMessageDialog` and
+  `ScheduledMessageReceiver` already handle one-shot scheduling via
+  `AlarmManager` - extending that to "every day at 9am" is a real but
+  bounded change to existing, working scheduling code rather than new
+  infrastructure.
+- **Moderate: export a conversation as a shareable image/PDF.** Needs
+  either Android's `PdfDocument` API or rendering the bubble list to a
+  bitmap - genuinely more work than it looks because gel bubbles make
+  "just draw the existing views" trickier than a flat design would.
+- **Hard / likely infeasible: typing indicators.** SMS/MMS has no
+  protocol-level concept of "the other person is typing" - that only
+  exists in RCS via carrier-operated Jibe/Google infrastructure that
+  third-party apps can't access. Not something to half-implement with a
+  fake/local-only indicator that doesn't reflect the other person's
+  actual state.
+- **Hard / likely infeasible: read receipts.** Same root cause as typing
+  indicators - real read receipts need RCS or carrier-specific delivery
+  APIs not exposed to third-party SMS apps. What *does* already exist and
+  work here is SMS delivery reports (`SmsSender`'s existing sent/delivered
+  status intents) - that's a different, already-implemented thing, not
+  the same as "they've read it."
