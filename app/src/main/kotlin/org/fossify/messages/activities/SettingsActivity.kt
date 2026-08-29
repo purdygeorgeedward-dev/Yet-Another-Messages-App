@@ -2,6 +2,7 @@ package org.fossify.messages.activities
 
 import android.content.Intent
 import android.os.Bundle
+import android.widget.SeekBar
 import androidx.activity.result.contract.ActivityResultContracts
 import org.fossify.commons.activities.ManageBlockedNumbersActivity
 import org.fossify.commons.dialogs.ChangeDateTimeFormatDialog
@@ -38,6 +39,7 @@ import org.fossify.messages.R
 import org.fossify.messages.databinding.ActivitySettingsBinding
 import org.fossify.messages.dialogs.ExportMessagesDialog
 import org.fossify.messages.extensions.config
+import org.fossify.messages.extensions.createGelBubbleDrawable
 import org.fossify.messages.extensions.emptyMessagesRecycleBin
 import org.fossify.messages.extensions.messagesDB
 import org.fossify.messages.helpers.FILE_SIZE_100_KB
@@ -56,6 +58,10 @@ import java.util.Locale
 import kotlin.system.exitProcess
 
 class SettingsActivity : SimpleActivity() {
+    companion object {
+        private const val MAX_HUE_DEGREES = 360
+    }
+
     private var blockedNumbersAtPause = -1
     private var recycleBinMessages = 0
     private val messagesFileType = "application/json"
@@ -119,6 +125,7 @@ class SettingsActivity : SimpleActivity() {
         setupKeepConversationsArchived()
         setupGelBubbleTheme()
         setupGelBubbleReceivedColor()
+        setupGelBubbleHueShift()
         setupLockScreenVisibility()
         setupMMSFileSizeLimit()
         setupUseRecycleBin()
@@ -333,9 +340,41 @@ class SettingsActivity : SimpleActivity() {
                 if (wasPositivePressed) {
                     config.gelBubbleReceivedColor = color
                     settingsGelBubbleReceivedColorSwatch.background.applyColorFilter(color)
+                    updateGelBubbleHuePreview()
                 }
             }
         }
+    }
+
+    // Live preview calls the real createGelBubbleDrawable() renderer for both
+    // sent and received, rather than a separate simplified preview - what's
+    // shown while dragging the slider is exactly what conversations will
+    // actually look like, not an approximation that could drift from the
+    // real rendering over time. Kept separate from the received-color swatch
+    // above on purpose: that swatch shows the exact color the user picked,
+    // this preview shows how it actually renders once the hue shift (and
+    // the gel gradient/rim/highlight) are applied on top of it.
+    private fun setupGelBubbleHueShift() = binding.apply {
+        settingsGelBubbleHueSeekbar.max = MAX_HUE_DEGREES
+        settingsGelBubbleHueSeekbar.progress = config.gelBubbleHueShift
+        updateGelBubbleHuePreview()
+
+        settingsGelBubbleHueSeekbar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    config.gelBubbleHueShift = progress
+                    updateGelBubbleHuePreview()
+                }
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+    }
+
+    private fun updateGelBubbleHuePreview() = binding.apply {
+        settingsGelBubbleHuePreviewSent.background = createGelBubbleDrawable(getProperPrimaryColor(), isSent = true)
+        settingsGelBubbleHuePreviewReceived.background = createGelBubbleDrawable(config.gelBubbleReceivedColor, isSent = false)
     }
 
     private fun setupLockScreenVisibility() = binding.apply {

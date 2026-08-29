@@ -167,4 +167,16 @@ class Config(context: Context) : BaseConfig(context) {
         get() = prefs.getInt(GEL_BUBBLE_RECEIVED_COLOR, DEFAULT_GEL_BUBBLE_RECEIVED_COLOR)
         set(gelBubbleReceivedColor) = prefs.edit()
             .putInt(GEL_BUBBLE_RECEIVED_COLOR, gelBubbleReceivedColor).apply()
+
+    // Degrees, 0-360, default 0 (no shift). Rotates the sent bubble's primary
+    // color and the received bubble's picked color together, via HSV hue
+    // rotation - a quick "shift the whole conversation's color mood" control
+    // that complements the two precise per-bubble color pickers rather than
+    // replacing them (a hue slider can't out-precision a real color picker
+    // for a single already-arbitrary color, so this is for fast coordinated
+    // shifts, not fine control).
+    var gelBubbleHueShift: Int
+        get() = prefs.getInt(GEL_BUBBLE_HUE_SHIFT, 0)
+        set(gelBubbleHueShift) = prefs.edit()
+            .putInt(GEL_BUBBLE_HUE_SHIFT, gelBubbleHueShift).apply()
 }

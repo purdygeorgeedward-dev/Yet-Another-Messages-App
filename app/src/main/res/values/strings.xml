@@ -70,6 +70,7 @@
     <string name="keep_conversations_archived">Keep conversations archived</string>
     <string name="gel_bubble_theme">Glossy gel bubble theme</string>
     <string name="gel_bubble_received_color">Received bubble color</string>
+    <string name="gel_bubble_hue_shift">Bubble color hue (shifts both together)</string>
     <!-- Recycle bin -->
     <string name="restore">Restore</string>
     <string name="restore_all_messages">Restore all messages</string>

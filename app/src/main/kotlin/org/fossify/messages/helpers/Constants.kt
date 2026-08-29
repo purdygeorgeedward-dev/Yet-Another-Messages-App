@@ -51,6 +51,7 @@ const val KEEP_CONVERSATIONS_ARCHIVED = "keep_conversations_archived"
 const val GEL_BUBBLE_THEME = "gel_bubble_theme"
 const val GEL_BUBBLE_RECEIVED_COLOR = "gel_bubble_received_color"
 const val DEFAULT_GEL_BUBBLE_RECEIVED_COLOR = 0xFF0EA5E9.toInt()
+const val GEL_BUBBLE_HUE_SHIFT = "gel_bubble_hue_shift"
 
 private const val PATH = "org.fossify.org.fossify.messages.action."
 const val MARK_AS_READ = PATH + "mark_as_read"
