@@ -7,22 +7,7 @@ import android.graphics.drawable.LayerDrawable
 import android.view.Gravity
 import org.fossify.commons.extensions.darkenColor
 import org.fossify.commons.extensions.lightenColor
-
-/**
- * Rotates a color's hue by the given number of degrees (0-360), leaving
- * saturation and value untouched - shifts sent and received colors together
- * without washing either of them out or darkening them.
- */
-private fun rotateHue(color: Int, degrees: Int): Int {
-    if (degrees == 0) {
-        return color
-    }
-
-    val hsv = FloatArray(3)
-    Color.colorToHSV(color, hsv)
-    hsv[0] = (hsv[0] + degrees).mod(360f)
-    return Color.HSVToColor(Color.alpha(color), hsv)
-}
+import org.fossify.commons.extensions.rotateHue
 
 /**
  * The color a gel bubble actually renders with, after the configured hue
@@ -34,7 +19,7 @@ private fun rotateHue(color: Int, degrees: Int): Int {
  * at the same V), so a shift can move perceived brightness enough to matter
  * even though it looks like a small, safe change on paper.
  */
-fun Context.getGelBubbleEffectiveColor(baseColor: Int): Int = rotateHue(baseColor, config.gelBubbleHueShift)
+fun Context.getGelBubbleEffectiveColor(baseColor: Int): Int = baseColor.rotateHue(config.gelBubbleHueShift)
 
 /**
  * Builds a glossy "gel" bubble drawable from a single base color - a
