@@ -9,6 +9,8 @@ import android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
 import android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
 import android.content.res.ColorStateList
 import android.graphics.drawable.LayerDrawable
+import android.graphics.Color
+import org.fossify.messages.extensions.createGelSurfaceDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
@@ -252,7 +254,7 @@ class ThreadActivity : SimpleActivity() {
             )
         )
         setupMessagingEdgeToEdge()
-        setupMaterialScrollListener(null, binding.threadAppbar)
+        if (!config.gelBubbleTheme) setupMaterialScrollListener(null, binding.threadAppbar)
 
         val extras = intent.extras
         if (extras == null) {
@@ -312,6 +314,7 @@ class ThreadActivity : SimpleActivity() {
         val bottomBarColor = getBottomBarColor()
         binding.messageHolder.root.setBackgroundColor(bottomBarColor)
         binding.shortCodeHolder.root.setBackgroundColor(bottomBarColor)
+        setupGelChrome()
     }
 
     override fun onPause() {
@@ -969,6 +972,65 @@ class ThreadActivity : SimpleActivity() {
         }
 
         setupScheduleSendUi()
+        setupGelChrome()
+    }
+
+
+    /** Keep the header and composer on the same glass material as the messages. */
+    private fun setupGelChrome() {
+        if (!config.gelBubbleTheme) return
+        val density = resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
+        val navy = Color.rgb(0, 62, 115)
+        val ice = Color.rgb(72, 190, 245)
+        binding.root.setBackgroundColor(Color.rgb(246, 250, 255))
+        binding.threadHolder.setBackgroundColor(Color.TRANSPARENT)
+        binding.threadAppbar.setBackgroundColor(Color.TRANSPARENT)
+        binding.threadAppbar.elevation = 0f
+        binding.threadAppbar.stateListAnimator = null
+        binding.threadToolbar.apply {
+            background = createGelSurfaceDrawable(ice, pale = true)
+            setTitleTextColor(navy)
+            navigationIcon?.mutate()?.applyColorFilter(navy)
+            overflowIcon?.mutate()?.applyColorFilter(navy)
+            for (i in 0 until menu.size()) menu.getItem(i).icon?.mutate()?.applyColorFilter(navy)
+            updateLayoutParams<android.view.ViewGroup.MarginLayoutParams> {
+                height = dp(64)
+                leftMargin = dp(6)
+                rightMargin = dp(6)
+                topMargin = dp(3)
+                bottomMargin = dp(3)
+            }
+        }
+        binding.messageHolder.apply {
+            root.background = createGelSurfaceDrawable(ice, pale = true)
+            root.setPadding(dp(8), dp(10), dp(8), root.paddingBottom)
+            threadTypeMessage.apply {
+                backgroundTintList = null
+                background = createGelSurfaceDrawable(Color.rgb(180, 218, 244), pale = true, inset = true)
+                minHeight = dp(56)
+                setPadding(dp(18), dp(14), dp(18), dp(14))
+                setTextColor(navy)
+                setHintTextColor(Color.rgb(89, 111, 132))
+            }
+            threadAddAttachment.apply {
+                background = createGelSurfaceDrawable(ice, pale = true, round = true)
+                applyColorFilter(navy)
+                alpha = 1f
+                setPadding(dp(15), dp(15), dp(15), dp(15))
+                updateLayoutParams { width = dp(52); height = dp(56) }
+            }
+            threadSendMessage.apply {
+                backgroundTintList = null
+                background = createGelSurfaceDrawable(Color.rgb(0, 164, 240), round = true)
+                stateListAnimator = null
+                elevation = 0f
+                setTextColor(Color.WHITE)
+                compoundDrawables.forEach { it?.mutate()?.applyColorFilter(Color.WHITE) }
+                setPadding(dp(8), dp(9), dp(8), dp(8))
+                updateLayoutParams { width = dp(54); height = dp(58) }
+            }
+        }
     }
 
     private fun askForExactAlarmPermissionIfNeeded(callback: () -> Unit = {}) {
@@ -2037,7 +2099,7 @@ class ThreadActivity : SimpleActivity() {
             R.drawable.ic_send_vector
         }
         ResourcesCompat.getDrawable(resources, drawableResId, theme)?.apply {
-            applyColorFilter(getProperTextColor())
+            applyColorFilter(if (config.gelBubbleTheme) Color.WHITE else getProperTextColor())
             binding.messageHolder.threadSendMessage.setCompoundDrawablesWithIntrinsicBounds(
                 null, this, null, null
             )

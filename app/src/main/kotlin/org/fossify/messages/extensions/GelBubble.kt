@@ -18,71 +18,62 @@ import org.fossify.commons.extensions.getNameLetter
 import org.fossify.commons.extensions.rotateHue
 import kotlin.math.min
 
-/** Keep user-selected hues, but give the gel finish a vivid, luminous body. */
-fun Context.getGelBubbleEffectiveColor(baseColor: Int): Int {
-    val hsv = FloatArray(3)
-    Color.colorToHSV(baseColor.rotateHue(config.gelBubbleHueShift), hsv)
-    hsv[1] = hsv[1].coerceAtLeast(0.78f)
-    hsv[2] = hsv[2].coerceAtLeast(0.96f)
-    return Color.HSVToColor(hsv)
-}
+/** The selected hue remains shared by the conversation and the Settings preview. */
+fun Context.getGelBubbleEffectiveColor(baseColor: Int): Int =
+    baseColor.rotateHue(config.gelBubbleHueShift) or (0xFF shl 24)
 
 private fun mix(color: Int, other: Int, amount: Float) =
     ColorUtils.blendARGB(color, other, amount)
 
-private fun gelColors(color: Int) = intArrayOf(
-    mix(color, Color.WHITE, 0.18f),
-    color,
-    mix(color, Color.BLACK, 0.12f),
-    color,
-    mix(color, Color.BLACK, 0.24f)
-)
-
-/** Choose the text with the best worst-case contrast across the body gradient. */
 fun Context.getGelBubbleTextColor(baseColor: Int): Int {
-    val colors = gelColors(getGelBubbleEffectiveColor(baseColor))
-    fun contrast(text: Int) = colors.minOf { ColorUtils.calculateContrast(text, it) }
-    return if (contrast(Color.BLACK) >= contrast(Color.WHITE)) Color.BLACK else Color.WHITE
+    val body = mix(getGelBubbleEffectiveColor(baseColor), Color.BLACK, 0.20f)
+    return if (ColorUtils.calculateContrast(Color.WHITE, body) >= 4.5) Color.WHITE else Color.BLACK
 }
 
 fun Context.createGelBubbleDrawable(baseColor: Int, isSent: Boolean): Drawable =
-    GelDrawable(getGelBubbleEffectiveColor(baseColor), resources.displayMetrics.density, isSent)
+    GlassGelDrawable(getGelBubbleEffectiveColor(baseColor), resources.displayMetrics.density)
 
-/** Render the same gel material behind the existing contact initial. Photos stay photos. */
+fun Context.createGelSurfaceDrawable(baseColor: Int, pale: Boolean = false, round: Boolean = false, inset: Boolean = false): Drawable =
+    GlassGelDrawable(baseColor, resources.displayMetrics.density, pale, round, inset)
+
+/** Letter placeholders share the bubble material. Real contact photos remain unchanged. */
 fun Context.createGelContactIcon(name: String, original: Bitmap): Bitmap {
     val size = original.width
-    val base = original.getPixel(size / 2, (original.height / 8).coerceAtLeast(1))
+    val color = getGelBubbleEffectiveColor(original.getPixel(size / 2, (original.height / 8).coerceAtLeast(1)))
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
-    GelDrawable(getGelBubbleEffectiveColor(base), resources.displayMetrics.density, null).apply {
+    GlassGelDrawable(color, resources.displayMetrics.density, round = true).apply {
         setBounds(0, 0, size, size)
         draw(canvas)
     }
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = getGelBubbleTextColor(base)
-        textSize = size * 0.5f
+        this.color = getGelBubbleTextColor(original.getPixel(size / 2, (original.height / 8).coerceAtLeast(1)))
+        textSize = size * 0.46f
         textAlign = Paint.Align.CENTER
         typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+        setShadowLayer(size * 0.025f, 0f, size * 0.015f, 0x70002550)
     }
     canvas.drawText(name.getNameLetter(), size / 2f,
-        size / 2f - (paint.ascent() + paint.descent()) / 2f, paint)
+        size / 2f - (paint.ascent() + paint.descent()) / 2f - size * 0.02f, paint)
     return bitmap
 }
 
 /**
- * Resolution-independent soft gel. Reflections follow the surface rather than
- * floating as a fixed oval over the text. All drawing is clipped to the silhouette.
+ * Layered glass material: colored shadow, rounded body, edge absorption,
+ * inner bevel, curved upper reflection, side glints and a lower reflected lip.
+ * All reflections scale with the bounds; no bitmap backgrounds or fixed blobs.
  */
-private class GelDrawable(
+private class GlassGelDrawable(
     private val color: Int,
     private val density: Float,
-    private val sent: Boolean?
+    private val pale: Boolean = false,
+    private val round: Boolean = false,
+    private val inset: Boolean = false
 ) : Drawable() {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val shape = Path()
-    private val rect = RectF()
-    private var opacity = 255
-    private var filter: ColorFilter? = null
+    private val path = Path()
+    private var drawableAlpha = 255
+    private var drawableFilter: ColorFilter? = null
 
     override fun draw(canvas: Canvas) {
         if (bounds.isEmpty) return
@@ -90,68 +81,104 @@ private class GelDrawable(
         canvas.translate(bounds.left.toFloat(), bounds.top.toFloat())
         val w = bounds.width().toFloat()
         val h = bounds.height().toFloat()
-        val edge = min(density * 0.8f, min(w, h) * 0.02f)
-        rect.set(edge, edge, w - edge, h - edge)
-        shape.reset()
-        if (sent == null) {
-            shape.addOval(rect, Path.Direction.CW)
-        } else {
-            val radius = min(22f * density, h / 2f)
-            val tail = min(7f * density, radius)
-            val radii = floatArrayOf(radius, radius, radius, radius,
-                if (sent) tail else radius, if (sent) tail else radius,
-                if (sent) radius else tail, if (sent) radius else tail)
-            shape.addRoundRect(rect, radii, Path.Direction.CW)
+        val margin = min(4f * density, min(w, h) * 0.065f)
+        val rect = RectF(margin, margin * 0.55f, w - margin, h - margin * 1.65f)
+        val radius = if (round) min(rect.width(), rect.height()) / 2f else min(32f * density, rect.height() / 2f)
+        fun outline(r: RectF) {
+            path.reset()
+            if (round) path.addOval(r, Path.Direction.CW)
+            else path.addRoundRect(r, radius, radius, Path.Direction.CW)
         }
-        canvas.clipPath(shape)
-        paint.alpha = opacity
-        paint.colorFilter = filter
+        fun gradient(colors: IntArray, positions: FloatArray? = null) {
+            paint.shader = LinearGradient(0f, rect.top, 0f, rect.bottom, colors, positions, Shader.TileMode.CLAMP)
+        }
+        fun fill() {
+            paint.style = Paint.Style.FILL
+            canvas.drawPath(path, paint)
+        }
+        paint.colorFilter = drawableFilter
+        paint.alpha = drawableAlpha
+
+        // Several translucent contours produce a soft colored shadow without
+        // requiring a software layer on every scrolling message view.
+        val shadow = RectF(rect).apply { offset(0f, margin * 0.75f) }
+        outline(shadow)
+        paint.shader = null
+        paint.style = Paint.Style.STROKE
+        for (spread in 5 downTo 1) {
+            paint.strokeWidth = margin * spread * 0.38f
+            paint.color = ColorUtils.setAlphaComponent(color, (9 * drawableAlpha / 255))
+            canvas.drawPath(path, paint)
+        }
+        outline(rect)
+        paint.alpha = drawableAlpha
+        gradient(if (pale) intArrayOf(0xFFF9FEFF.toInt(), mix(color, Color.WHITE, 0.68f),
+            mix(color, Color.WHITE, 0.82f), mix(color, Color.WHITE, 0.47f))
+        else intArrayOf(mix(color, Color.BLACK, 0.23f), mix(color, Color.WHITE, 0.12f),
+            color, mix(color, Color.BLACK, 0.22f), mix(color, Color.BLACK, 0.38f)),
+            if (pale) null else floatArrayOf(0f, 0.12f, 0.35f, 0.76f, 1f))
+        fill()
+
+        val clipped = canvas.save()
+        canvas.clipPath(path)
+        // Bright interior with darker curved edges, like light through colored gel.
+        paint.shader = RadialGradient(w * 0.48f, rect.centerY(), maxOf(rect.width() * 0.57f, rect.height() * 0.72f),
+            intArrayOf(Color.argb(if (pale) 15 else 5, 0, 15, 55),
+                Color.argb(if (pale) 15 else 90, 0, 15, 55)),
+            floatArrayOf(0.60f, 1f), Shader.TileMode.CLAMP)
+        fill()
+
+        val top = rect.top + rect.height() * 0.035f
+        val depth = if (round) rect.height() * 0.36f else min(rect.height() * 0.34f, 20f * density)
+        val reflection = Path().apply {
+            moveTo(rect.left + rect.width() * 0.07f, top + depth * 0.52f)
+            cubicTo(rect.left + rect.width() * 0.09f, top - depth * 0.12f,
+                rect.right - rect.width() * 0.09f, top - depth * 0.12f,
+                rect.right - rect.width() * 0.07f, top + depth * 0.52f)
+            cubicTo(rect.right - rect.width() * 0.08f, top + depth * 1.18f,
+                rect.left + rect.width() * 0.08f, top + depth * 1.18f,
+                rect.left + rect.width() * 0.07f, top + depth * 0.52f)
+            close()
+        }
+        paint.shader = LinearGradient(0f, top, 0f, top + depth * 1.1f,
+            intArrayOf(Color.argb(250, 255, 255, 255), Color.argb(125, 230, 250, 255),
+                Color.argb(12, 255, 255, 255)), floatArrayOf(0f, 0.57f, 1f), Shader.TileMode.CLAMP)
         paint.style = Paint.Style.FILL
-        paint.shader = LinearGradient(0f, 0f, 0f, h, gelColors(color),
-            floatArrayOf(0f, 0.22f, 0.56f, 0.82f, 1f), Shader.TileMode.CLAMP)
-        canvas.drawPath(shape, paint)
-
-        // A broad internal glow gives the material depth without a gray wash.
-        paint.shader = RadialGradient(w * 0.52f, h * 0.8f, maxOf(w * 0.55f, h),
-            intArrayOf(Color.argb(65, 255, 255, 255), Color.TRANSPARENT),
-            null, Shader.TileMode.CLAMP)
-        canvas.drawPath(shape, paint)
-
-        // Curved upper reflection; shallow on balloons, fuller on round avatars.
-        val reflection = Path()
-        val top = if (sent == null) h * 0.1f else density * 2f
-        val depth = if (sent == null) h * 0.38f else min(h * 0.23f, density * 10f)
-        reflection.moveTo(w * 0.08f, top + depth * 0.45f)
-        reflection.cubicTo(w * 0.18f, top - depth * 0.2f,
-            w * 0.78f, top - depth * 0.2f, w * 0.92f, top + depth * 0.45f)
-        reflection.cubicTo(w * 0.8f, top + depth * 1.05f,
-            w * 0.22f, top + depth * 1.05f, w * 0.08f, top + depth * 0.45f)
-        reflection.close()
-        paint.shader = LinearGradient(0f, top, 0f, top + depth,
-            intArrayOf(Color.argb(235, 255, 255, 255), Color.argb(12, 255, 255, 255)),
-            null, Shader.TileMode.CLAMP)
         canvas.drawPath(reflection, paint)
 
-        // Fine colored edge, with a separate reflected light along the lower lip.
-        paint.shader = null
-        paint.color = mix(color, Color.BLACK, 0.3f)
-        paint.alpha = opacity
+        // Small vertical glints hug both ends instead of covering the lettering.
+        for (right in listOf(false, true)) {
+            val x = if (right) rect.right - margin * 0.65f else rect.left + margin * 0.65f
+            val glint = RectF(x - margin * 0.38f, rect.top + rect.height() * 0.37f,
+                x + margin * 0.38f, rect.top + rect.height() * 0.70f)
+            paint.shader = LinearGradient(0f, glint.top, 0f, glint.bottom,
+                intArrayOf(Color.TRANSPARENT, Color.argb(230, 225, 255, 255), Color.TRANSPARENT),
+                null, Shader.TileMode.CLAMP)
+            canvas.drawOval(glint, paint)
+        }
+        canvas.restoreToCount(clipped)
+
+        // Outer colored rim and inset light bevel give the shape a glass wall.
+        outline(rect)
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = edge * 2f
-        canvas.drawPath(shape, paint)
-        paint.shader = LinearGradient(0f, 0f, 0f, h,
-            intArrayOf(Color.argb(180, 255, 255, 255), Color.TRANSPARENT,
-                Color.argb(120, 255, 255, 255)), floatArrayOf(0f, 0.55f, 1f),
-            Shader.TileMode.CLAMP)
-        paint.strokeWidth = edge
-        canvas.drawPath(shape, paint)
+        paint.strokeWidth = min(1.1f * density, margin * 0.55f)
+        gradient(if (pale) intArrayOf(mix(color, Color.WHITE, 0.3f), Color.WHITE, mix(color, Color.WHITE, 0.15f))
+            else intArrayOf(mix(color, Color.BLACK, 0.3f), mix(color, Color.BLACK, 0.55f), mix(color, Color.BLACK, 0.20f)))
+        canvas.drawPath(path, paint)
+        val inner = RectF(rect).apply { inset(margin * 0.7f, margin * 0.7f) }
+        outline(inner)
+        paint.strokeWidth = min(1.25f * density, margin * 0.6f)
+        gradient(intArrayOf(Color.argb(if (inset) 90 else 245, 255, 255, 255),
+            Color.argb(25, 255, 255, 255), Color.argb(180, 170, 240, 255)),
+            floatArrayOf(0f, 0.53f, 1f))
+        canvas.drawPath(path, paint)
         paint.shader = null
         paint.style = Paint.Style.FILL
         canvas.restoreToCount(save)
     }
 
-    override fun setAlpha(alpha: Int) { opacity = alpha; invalidateSelf() }
-    override fun setColorFilter(colorFilter: ColorFilter?) { filter = colorFilter; invalidateSelf() }
+    override fun setAlpha(alpha: Int) { drawableAlpha = alpha; invalidateSelf() }
+    override fun setColorFilter(colorFilter: ColorFilter?) { drawableFilter = colorFilter; invalidateSelf() }
     @Deprecated("Deprecated in Android")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 }

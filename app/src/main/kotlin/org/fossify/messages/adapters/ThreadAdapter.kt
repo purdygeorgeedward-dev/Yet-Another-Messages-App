@@ -389,6 +389,17 @@ class ThreadAdapter(
                 setupSentMessageView(messageBinding = this, message = message)
             }
 
+            if (activity.config.gelBubbleTheme) {
+                val density = resources.displayMetrics.density
+                threadMessageBody.setPadding((18 * density).toInt(), (16 * density).toInt(),
+                    (18 * density).toInt(), (18 * density).toInt())
+                threadMessageBody.setShadowLayer(1.5f * density, 0f, density * 0.5f, 0x66002550)
+            } else {
+                val padding = resources.getDimensionPixelSize(org.fossify.commons.R.dimen.normal_margin)
+                threadMessageBody.setPadding(padding, padding, padding, padding)
+                threadMessageBody.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT)
+            }
+
             if (message.attachment?.attachments?.isNotEmpty() == true) {
                 threadMessageAttachmentsHolder.beVisible()
                 threadMessageAttachmentsHolder.removeAllViews()

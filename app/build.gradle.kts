@@ -33,6 +33,7 @@ android {
 
     defaultConfig {
         applicationId = project.property("APP_ID").toString()
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = project.libs.versions.app.build.minimumSDK.get().toInt()
         targetSdk = project.libs.versions.app.build.targetSDK.get().toInt()
         versionName = project.property("VERSION_NAME").toString()
@@ -141,6 +142,8 @@ detekt {
 }
 
 dependencies {
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
     implementation(libs.fossify.commons)
     implementation(libs.eventbus)
     implementation(libs.indicator.fast.scroll)

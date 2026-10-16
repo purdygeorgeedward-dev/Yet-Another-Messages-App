@@ -53,3 +53,35 @@ jobs:
           path: app/build/outputs/apk/foss/debug/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Enable Android emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Render gel samples on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            bash ./gradlew :app:connectedFossDebugAndroidTest --stacktrace
+            adb pull /sdcard/Android/data/org.fossify.messages.gelpreview/files/gel-render-preview.png gel-render-preview.png
+      - name: Export rendered sample for inspection
+        run: |
+          python3 - <<'PY'
+          import base64
+          from pathlib import Path
+          print("GEL_RENDER_PNG_BASE64=" + base64.b64encode(Path("gel-render-preview.png").read_bytes()).decode())
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gel-render-verification
+          path: |
+            gel-render-preview.png
+            app/build/reports/androidTests/connected/
+          if-no-files-found: warn
+          retention-days: 14
