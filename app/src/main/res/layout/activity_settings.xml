@@ -466,7 +466,7 @@
 
                 <View
                     android:id="@+id/settings_gel_avatar_color_swatch"
-                    android:layout_width="64dp"
+                    android:layout_width="32dp"
                     android:layout_height="32dp"
                     android:layout_alignParentEnd="true"
                     android:layout_centerVertical="true"
