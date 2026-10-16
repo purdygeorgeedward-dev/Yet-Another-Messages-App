@@ -23,6 +23,24 @@ jobs:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: purdygeorgeedward-dev/Yet-Another-Commons
+          ref: 90e41fc479
+          path: .build-commons
+      - name: Use Commons source at the pinned revision
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          settings = Path("settings.gradle.kts")
+          settings.write_text(settings.read_text().replace("https://www.jitpack.io", "https://jitpack.io") + '''
+          includeBuild(".build-commons") {
+              dependencySubstitution {
+                  substitute(module("com.github.purdygeorgeedward-dev:Yet-Another-Commons")).using(project(":commons"))
+              }
+          }
+          ''')
+          PY
       - name: Build debug APK
         run: bash ./gradlew :app:assembleFossDebug --stacktrace
       - uses: actions/upload-artifact@v4
