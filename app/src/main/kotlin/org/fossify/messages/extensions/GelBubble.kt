@@ -38,15 +38,16 @@ fun Context.createGelSurfaceDrawable(baseColor: Int, pale: Boolean = false, roun
 
 /** Letter placeholders share the bubble material. Real contact photos remain unchanged. */
 fun Context.createGelContactIcon(name: String, original: Bitmap): Bitmap {
-    val size = original.width
+    // Supersample the small clipped reflections to avoid jagged avatar edges.
+    val size = original.width * 2
     val hsv = FloatArray(3)
-    Color.colorToHSV(getGelBubbleEffectiveColor(original.getPixel(size / 2, (original.height / 8).coerceAtLeast(1))), hsv)
+    Color.colorToHSV(getGelBubbleEffectiveColor(original.getPixel(original.width / 2, (original.height / 8).coerceAtLeast(1))), hsv)
     hsv[1] = hsv[1].coerceAtLeast(0.90f)
     hsv[2] = hsv[2].coerceAtLeast(0.96f)
     val color = Color.HSVToColor(hsv)
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
-    GlassGelDrawable(color, resources.displayMetrics.density, round = true).apply {
+    GlassGelDrawable(color, resources.displayMetrics.density * 2f, round = true).apply {
         setBounds(0, 0, size, size)
         draw(canvas)
     }
@@ -116,8 +117,8 @@ private class GlassGelDrawable(
         }
         outline(rect)
         paint.alpha = drawableAlpha
-        gradient(if (pale) intArrayOf(0xFFF9FEFF.toInt(), mix(color, Color.WHITE, 0.68f),
-            mix(color, Color.WHITE, 0.82f), mix(color, Color.WHITE, 0.47f))
+        gradient(if (pale) intArrayOf(0xFFF9FEFF.toInt(), mix(color, Color.WHITE, 0.42f),
+            mix(color, Color.WHITE, 0.65f), mix(color, Color.WHITE, 0.22f))
         else intArrayOf(mix(color, Color.BLACK, 0.23f), mix(color, Color.WHITE, 0.12f),
             color, mix(color, Color.BLACK, 0.22f), mix(color, Color.BLACK, 0.38f)),
             if (pale) null else floatArrayOf(0f, 0.12f, 0.35f, 0.76f, 1f))
