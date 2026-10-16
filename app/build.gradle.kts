@@ -69,7 +69,7 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".debug"
+            applicationIdSuffix = ".gelpreview"
         }
         release {
             isMinifyEnabled = true

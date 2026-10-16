@@ -41,11 +41,15 @@ jobs:
           }
           ''')
           PY
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: messages-gel-preview-debug-key-v1
       - name: Build debug APK
         run: bash ./gradlew :app:assembleFossDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: galaxy-a26-debug-apk
+          name: messages-gel-preview-apk
           path: app/build/outputs/apk/foss/debug/*.apk
           if-no-files-found: error
           retention-days: 14

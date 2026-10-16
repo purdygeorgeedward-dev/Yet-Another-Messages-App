@@ -64,7 +64,8 @@ import org.fossify.messages.dialogs.MessageDetailsDialog
 import org.fossify.messages.dialogs.SelectTextDialog
 import org.fossify.messages.extensions.config
 import org.fossify.messages.extensions.createGelBubbleDrawable
-import org.fossify.messages.extensions.getGelBubbleEffectiveColor
+import org.fossify.messages.extensions.getGelBubbleTextColor
+import org.fossify.messages.extensions.createGelContactIcon
 import org.fossify.messages.extensions.getContactFromAddress
 import org.fossify.messages.extensions.isImageMimeType
 import org.fossify.messages.extensions.isVCardMimeType
@@ -430,7 +431,7 @@ class ThreadAdapter(
             threadMessageBody.apply {
                 if (activity.config.gelBubbleTheme) {
                     val baseColor = activity.config.gelBubbleReceivedColor
-                    val receivedContrastColor = activity.getGelBubbleEffectiveColor(baseColor).getContrastColor()
+                    val receivedContrastColor = activity.getGelBubbleTextColor(baseColor)
                     background = activity.createGelBubbleDrawable(baseColor, isSent = false)
                     setTextColor(receivedContrastColor)
                     setLinkTextColor(receivedContrastColor)
@@ -443,7 +444,9 @@ class ThreadAdapter(
 
             if (!activity.isFinishing && !activity.isDestroyed) {
                 val contactLetterIcon = SimpleContactsHelper(activity).getContactLetterIcon(message.senderName)
-                val placeholder = contactLetterIcon.toDrawable(activity.resources)
+                val placeholder = (if (activity.config.gelBubbleTheme) {
+                    activity.createGelContactIcon(message.senderName, contactLetterIcon)
+                } else contactLetterIcon).toDrawable(activity.resources)
 
                 val options = RequestOptions()
                     .diskCacheStrategy(DiskCacheStrategy.RESOURCE)
@@ -471,7 +474,7 @@ class ThreadAdapter(
 
             val primaryColor = activity.getProperPrimaryColor()
             val contrastColor = if (activity.config.gelBubbleTheme) {
-                activity.getGelBubbleEffectiveColor(primaryColor).getContrastColor()
+                activity.getGelBubbleTextColor(primaryColor)
             } else {
                 primaryColor.getContrastColor()
             }

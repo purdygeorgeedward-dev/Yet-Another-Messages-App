@@ -40,6 +40,7 @@ import org.fossify.messages.databinding.ActivitySettingsBinding
 import org.fossify.messages.dialogs.ExportMessagesDialog
 import org.fossify.messages.extensions.config
 import org.fossify.messages.extensions.createGelBubbleDrawable
+import org.fossify.messages.extensions.getGelBubbleTextColor
 import org.fossify.messages.extensions.emptyMessagesRecycleBin
 import org.fossify.messages.extensions.messagesDB
 import org.fossify.messages.helpers.FILE_SIZE_100_KB
@@ -373,6 +374,8 @@ class SettingsActivity : SimpleActivity() {
     }
 
     private fun updateGelBubbleHuePreview() = binding.apply {
+        settingsGelBubbleHuePreviewSent.setTextColor(getGelBubbleTextColor(getProperPrimaryColor()))
+        settingsGelBubbleHuePreviewReceived.setTextColor(getGelBubbleTextColor(config.gelBubbleReceivedColor))
         settingsGelBubbleHuePreviewSent.background = createGelBubbleDrawable(getProperPrimaryColor(), isSent = true)
         settingsGelBubbleHuePreviewReceived.background = createGelBubbleDrawable(config.gelBubbleReceivedColor, isSent = false)
     }

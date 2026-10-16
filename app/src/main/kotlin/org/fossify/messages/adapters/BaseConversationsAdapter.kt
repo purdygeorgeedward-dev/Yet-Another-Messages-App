@@ -2,6 +2,8 @@ package org.fossify.messages.adapters
 
 import android.annotation.SuppressLint
 import android.graphics.Typeface
+import androidx.core.graphics.drawable.toDrawable
+import org.fossify.messages.extensions.createGelContactIcon
 import android.os.Parcelable
 import android.util.TypedValue
 import android.view.View
@@ -195,6 +197,9 @@ abstract class BaseConversationsAdapter(
             // at group conversations we use an icon as the placeholder, not any letter
             val placeholder = if (conversation.isGroupConversation) {
                 SimpleContactsHelper(activity).getColoredGroupIcon(conversation.title)
+            } else if (activity.config.gelBubbleTheme) {
+                val icon = SimpleContactsHelper(activity).getContactLetterIcon(conversation.title)
+                activity.createGelContactIcon(conversation.title, icon).toDrawable(activity.resources)
             } else {
                 null
             }
