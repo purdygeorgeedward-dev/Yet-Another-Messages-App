@@ -40,11 +40,7 @@ fun Context.createGelSurfaceDrawable(baseColor: Int, pale: Boolean = false, roun
 fun Context.createGelContactIcon(name: String, original: Bitmap): Bitmap {
     // Supersample the small clipped reflections to avoid jagged avatar edges.
     val size = original.width * 2
-    val hsv = FloatArray(3)
-    Color.colorToHSV(getGelBubbleEffectiveColor(original.getPixel(original.width / 2, (original.height / 8).coerceAtLeast(1))), hsv)
-    hsv[1] = hsv[1].coerceAtLeast(0.90f)
-    hsv[2] = hsv[2].coerceAtLeast(0.96f)
-    val color = Color.HSVToColor(hsv)
+    val color = getGelBubbleEffectiveColor(config.gelAvatarColor)
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     GlassGelDrawable(color, resources.displayMetrics.density * 2f, round = true).apply {

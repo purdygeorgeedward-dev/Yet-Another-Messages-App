@@ -23,6 +23,8 @@ jobs:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
       - uses: actions/checkout@v4
         with:
           repository: purdygeorgeedward-dev/Yet-Another-Commons

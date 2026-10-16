@@ -44,7 +44,10 @@ public class GelRenderTest {
         Bitmap image = Bitmap.createBitmap(720, 1280, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(image);
         canvas.drawColor(0xFFF6FAFF);
-        int blue = 0xFF0084E8, slate = 0xFF607D9A, pink = 0xFFEF006B, ice = 0xFF48BEF5;
+        org.fossify.messages.helpers.Config palette = new org.fossify.messages.helpers.Config(context);
+        palette.resetGelColors();
+        int blue = palette.getGelBubbleReceivedColor(), slate = palette.getGelBubbleSentColor(),
+            pink = palette.getGelAvatarColor(), ice = palette.getGelAccentColor();
         surface(canvas, ice, true, false, false, 8, 8, 704, 110);
         text(canvas, "\u2039   ChatGPT", 0xFF003E73, 38, 36, 34, 500);
         text(canvas, "\u260e  \u22ee", 0xFF003E73, 34, 565, 35, 130);
@@ -82,4 +85,39 @@ public class GelRenderTest {
             sample.recycle();
         }
     }
+    @Test public void customPaletteSurvivesRecreationAndExplicitResetRestoresDefaults() {
+        org.fossify.messages.helpers.Config first = new org.fossify.messages.helpers.Config(context);
+        first.resetGelColors();
+        int defaultSent = first.getGelBubbleSentColor();
+        int defaultReceived = first.getGelBubbleReceivedColor();
+        int defaultAvatar = first.getGelAvatarColor();
+        int defaultAccent = first.getGelAccentColor();
+        first.setGelBubbleSentColor(0xFFFFA000);
+        first.setGelBubbleReceivedColor(0xFF4527A0);
+        first.setGelAvatarColor(0xFF00C853);
+        first.setGelAccentColor(0xFFE91E63);
+        first.setGelBubbleHueShift(75);
+        org.fossify.messages.helpers.Config reopened = new org.fossify.messages.helpers.Config(context);
+        assertEquals(0xFFFFA000, reopened.getGelBubbleSentColor());
+        assertEquals(0xFF4527A0, reopened.getGelBubbleReceivedColor());
+        assertEquals(0xFF00C853, reopened.getGelAvatarColor());
+        assertEquals(0xFFE91E63, reopened.getGelAccentColor());
+        assertEquals(75, reopened.getGelBubbleHueShift());
+        // Rendering an arbitrary choice must not replace it with a preset.
+        GelBubbleKt.createGelBubbleDrawable(context, reopened.getGelBubbleReceivedColor(), false);
+        Bitmap source = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888);
+        source.eraseColor(Color.GRAY);
+        Bitmap greenAvatar = GelBubbleKt.createGelContactIcon(context, "C", source);
+        reopened.setGelAvatarColor(0xFFE91E63);
+        Bitmap pinkAvatar = GelBubbleKt.createGelContactIcon(context, "C", source);
+        assertNotEquals(greenAvatar.getPixel(100, 145), pinkAvatar.getPixel(100, 145));
+        assertEquals(0xFF4527A0, new org.fossify.messages.helpers.Config(context).getGelBubbleReceivedColor());
+        reopened.resetGelColors();
+        assertEquals(defaultSent, reopened.getGelBubbleSentColor());
+        assertEquals(defaultReceived, reopened.getGelBubbleReceivedColor());
+        assertEquals(defaultAvatar, reopened.getGelAvatarColor());
+        assertEquals(defaultAccent, reopened.getGelAccentColor());
+        assertEquals(0, reopened.getGelBubbleHueShift());
+    }
+
 }

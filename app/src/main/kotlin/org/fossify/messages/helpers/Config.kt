@@ -160,21 +160,37 @@ class Config(context: Context) : BaseConfig(context) {
         set(gelBubbleTheme) = prefs.edit()
             .putBoolean(GEL_BUBBLE_THEME, gelBubbleTheme).apply()
 
-    // Default matches the original hardcoded gel_bubble_received_color resource
-    // (#0EA5E9) exactly, so existing users see no change until they actually open
-    // the color picker and choose something else.
+    // Explicit choices survive upgrades; absent preferences use the bright palette.
     var gelBubbleReceivedColor: Int
         get() = prefs.getInt(GEL_BUBBLE_RECEIVED_COLOR, DEFAULT_GEL_BUBBLE_RECEIVED_COLOR)
         set(gelBubbleReceivedColor) = prefs.edit()
-            .putInt(GEL_BUBBLE_RECEIVED_COLOR, gelBubbleReceivedColor).apply()
+            .putInt(GEL_BUBBLE_RECEIVED_COLOR, gelBubbleReceivedColor or (0xFF shl 24)).apply()
 
-    // Degrees, 0-360, default 0 (no shift). Rotates the sent bubble's primary
-    // color and the received bubble's picked color together, via HSV hue
-    // rotation - a quick "shift the whole conversation's color mood" control
-    // that complements the two precise per-bubble color pickers rather than
-    // replacing them (a hue slider can't out-precision a real color picker
-    // for a single already-arbitrary color, so this is for fast coordinated
-    // shifts, not fine control).
+    var gelBubbleSentColor: Int
+        get() = prefs.getInt("gel_bubble_sent_color", DEFAULT_GEL_BUBBLE_SENT_COLOR)
+        set(value) = prefs.edit().putInt("gel_bubble_sent_color", value or (0xFF shl 24)).apply()
+
+    var gelAvatarColor: Int
+        get() = prefs.getInt("gel_avatar_color", DEFAULT_GEL_AVATAR_COLOR)
+        set(value) = prefs.edit().putInt("gel_avatar_color", value or (0xFF shl 24)).apply()
+
+    var gelAccentColor: Int
+        get() = prefs.getInt("gel_accent_color", DEFAULT_GEL_ACCENT_COLOR)
+        set(value) = prefs.edit().putInt("gel_accent_color", value or (0xFF shl 24)).apply()
+
+    fun applyGelPalette(palette: GelPalette) {
+        prefs.edit()
+            .putInt("gel_bubble_sent_color", palette.sent)
+            .putInt(GEL_BUBBLE_RECEIVED_COLOR, palette.received)
+            .putInt("gel_avatar_color", palette.avatar)
+            .putInt("gel_accent_color", palette.accent)
+            .putInt(GEL_BUBBLE_HUE_SHIFT, 0)
+            .apply()
+    }
+
+    fun resetGelColors() = applyGelPalette(GEL_PALETTES.first())
+
+    // Rotate all four gel colors together without changing the saved base colors.
     var gelBubbleHueShift: Int
         get() = prefs.getInt(GEL_BUBBLE_HUE_SHIFT, 0)
         set(gelBubbleHueShift) = prefs.edit()

@@ -380,6 +380,13 @@
 
             </RelativeLayout>
 
+            <TextView
+                android:id="@+id/settings_gel_colors_label"
+                style="@style/SettingsSectionLabelStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/gel_colors_heading" />
+
             <RelativeLayout
                 android:id="@+id/settings_gel_bubble_theme_holder"
                 style="@style/SettingsHolderSwitchStyle"
@@ -392,6 +399,30 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/gel_bubble_theme" />
+
+            </RelativeLayout>
+
+            <RelativeLayout
+                android:id="@+id/settings_gel_bubble_sent_color_holder"
+                style="@style/SettingsHolderTextViewStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <org.fossify.commons.views.MyTextView
+                    android:id="@+id/settings_gel_bubble_sent_color_label"
+                    style="@style/SettingsTextLabelStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_toStartOf="@+id/settings_gel_bubble_sent_color_swatch"
+                    android:text="@string/gel_bubble_sent_color" />
+
+                <View
+                    android:id="@+id/settings_gel_bubble_sent_color_swatch"
+                    android:layout_width="64dp"
+                    android:layout_height="32dp"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:background="@drawable/circle_background" />
 
             </RelativeLayout>
 
@@ -411,12 +442,86 @@
 
                 <View
                     android:id="@+id/settings_gel_bubble_received_color_swatch"
-                    android:layout_width="@dimen/normal_margin"
-                    android:layout_height="@dimen/normal_margin"
+                    android:layout_width="64dp"
+                    android:layout_height="32dp"
                     android:layout_alignParentEnd="true"
                     android:layout_centerVertical="true"
                     android:background="@drawable/circle_background" />
 
+            </RelativeLayout>
+
+            <RelativeLayout
+                android:id="@+id/settings_gel_avatar_color_holder"
+                style="@style/SettingsHolderTextViewStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <org.fossify.commons.views.MyTextView
+                    android:id="@+id/settings_gel_avatar_color_label"
+                    style="@style/SettingsTextLabelStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_toStartOf="@+id/settings_gel_avatar_color_swatch"
+                    android:text="@string/gel_avatar_color" />
+
+                <View
+                    android:id="@+id/settings_gel_avatar_color_swatch"
+                    android:layout_width="64dp"
+                    android:layout_height="32dp"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:background="@drawable/circle_background" />
+
+            </RelativeLayout>
+
+            <RelativeLayout
+                android:id="@+id/settings_gel_accent_color_holder"
+                style="@style/SettingsHolderTextViewStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <org.fossify.commons.views.MyTextView
+                    android:id="@+id/settings_gel_accent_color_label"
+                    style="@style/SettingsTextLabelStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_toStartOf="@+id/settings_gel_accent_color_swatch"
+                    android:text="@string/gel_accent_color" />
+
+                <View
+                    android:id="@+id/settings_gel_accent_color_swatch"
+                    android:layout_width="64dp"
+                    android:layout_height="32dp"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:background="@drawable/circle_background" />
+
+            </RelativeLayout>
+
+            <RelativeLayout
+                android:id="@+id/settings_gel_palette_holder"
+                style="@style/SettingsHolderTextViewStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+                <org.fossify.commons.views.MyTextView
+                    android:id="@+id/settings_gel_palette_label"
+                    style="@style/SettingsTextLabelStyle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/gel_palette_choose" />
+            </RelativeLayout>
+
+            <RelativeLayout
+                android:id="@+id/settings_gel_palette_reset_holder"
+                style="@style/SettingsHolderTextViewStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+                <org.fossify.commons.views.MyTextView
+                    android:id="@+id/settings_gel_palette_reset_label"
+                    style="@style/SettingsTextLabelStyle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/gel_palette_reset" />
             </RelativeLayout>
 
             <RelativeLayout

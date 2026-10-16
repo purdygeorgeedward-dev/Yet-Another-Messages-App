@@ -51,6 +51,7 @@ import org.fossify.commons.models.FAQItem
 import org.fossify.commons.models.Release
 import org.fossify.messages.BuildConfig
 import org.fossify.messages.R
+import org.fossify.messages.helpers.gelStyleSignature
 import org.fossify.messages.adapters.ConversationsAdapter
 import org.fossify.messages.adapters.SearchResultsAdapter
 import org.fossify.messages.databinding.ActivityMainBinding
@@ -106,8 +107,15 @@ class MainActivity : SimpleActivity() {
         }
     }
 
+    private var lastGelStyle: String? = null
+
     override fun onResume() {
         super.onResume()
+        val gelStyle = config.gelStyleSignature()
+        if (lastGelStyle != null && lastGelStyle != gelStyle) {
+            getOrCreateConversationsAdapter().updateGelColors()
+        }
+        lastGelStyle = gelStyle
         updateMenuColors()
         refreshMenuItems()
 

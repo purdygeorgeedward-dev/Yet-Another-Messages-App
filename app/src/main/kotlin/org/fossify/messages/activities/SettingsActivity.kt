@@ -3,6 +3,10 @@ package org.fossify.messages.activities
 import android.content.Intent
 import android.os.Bundle
 import android.widget.SeekBar
+import android.view.View
+import org.fossify.messages.extensions.createGelSurfaceDrawable
+import org.fossify.messages.extensions.getGelBubbleEffectiveColor
+import org.fossify.messages.helpers.GEL_PALETTES
 import androidx.activity.result.contract.ActivityResultContracts
 import org.fossify.commons.activities.ManageBlockedNumbersActivity
 import org.fossify.commons.dialogs.ChangeDateTimeFormatDialog
@@ -125,6 +129,7 @@ class SettingsActivity : SimpleActivity() {
         setupKeepConversationsArchived()
         setupGelBubbleTheme()
         setupGelBubbleReceivedColor()
+        setupGelColorOptions()
         setupGelBubbleHueShift()
         setupLockScreenVisibility()
         setupMMSFileSizeLimit()
@@ -143,6 +148,7 @@ class SettingsActivity : SimpleActivity() {
 
         arrayOf(
             binding.settingsColorCustomizationSectionLabel,
+            binding.settingsGelColorsLabel,
             binding.settingsGeneralSettingsLabel,
             binding.settingsOutgoingMessagesLabel,
             binding.settingsNotificationsLabel,
@@ -372,8 +378,46 @@ class SettingsActivity : SimpleActivity() {
         })
     }
 
+    private fun setupGelColorOptions() = binding.apply {
+        fun colorPicker(holder: View, current: () -> Int, save: (Int) -> Unit) {
+            holder.setOnClickListener {
+                ColorPickerDialog(this@SettingsActivity, current()) { accepted, color ->
+                    if (accepted) {
+                        save(color)
+                        updateGelBubbleHuePreview()
+                    }
+                }
+            }
+        }
+        colorPicker(settingsGelBubbleSentColorHolder, { config.gelBubbleSentColor }) { config.gelBubbleSentColor = it }
+        colorPicker(settingsGelAvatarColorHolder, { config.gelAvatarColor }) { config.gelAvatarColor = it }
+        colorPicker(settingsGelAccentColorHolder, { config.gelAccentColor }) { config.gelAccentColor = it }
+        settingsGelPaletteHolder.setOnClickListener {
+            val selected = GEL_PALETTES.indexOfFirst { p ->
+                p.sent == config.gelBubbleSentColor && p.received == config.gelBubbleReceivedColor &&
+                    p.avatar == config.gelAvatarColor && p.accent == config.gelAccentColor && config.gelBubbleHueShift == 0
+            }
+            val items = ArrayList(GEL_PALETTES.mapIndexed { index, palette -> RadioItem(index, getString(palette.nameRes)) })
+            RadioGroupDialog(this@SettingsActivity, items, selected) { choice ->
+                config.applyGelPalette(GEL_PALETTES[choice as Int])
+                settingsGelBubbleHueSeekbar.progress = config.gelBubbleHueShift
+                updateGelBubbleHuePreview()
+            }
+        }
+        settingsGelPaletteResetHolder.setOnClickListener {
+            config.resetGelColors()
+            settingsGelBubbleHueSeekbar.progress = config.gelBubbleHueShift
+            updateGelBubbleHuePreview()
+        }
+        updateGelBubbleHuePreview()
+    }
+
     private fun updateGelBubbleHuePreview() = binding.apply {
-        settingsGelBubbleHuePreviewSent.background = createGelBubbleDrawable(getProperPrimaryColor(), isSent = true)
+        settingsGelBubbleSentColorSwatch.background = createGelBubbleDrawable(config.gelBubbleSentColor, isSent = true)
+        settingsGelBubbleReceivedColorSwatch.background = createGelBubbleDrawable(config.gelBubbleReceivedColor, isSent = false)
+        settingsGelAvatarColorSwatch.background = createGelSurfaceDrawable(getGelBubbleEffectiveColor(config.gelAvatarColor), round = true)
+        settingsGelAccentColorSwatch.background = createGelSurfaceDrawable(getGelBubbleEffectiveColor(config.gelAccentColor), pale = true)
+        settingsGelBubbleHuePreviewSent.background = createGelBubbleDrawable(config.gelBubbleSentColor, isSent = true)
         settingsGelBubbleHuePreviewReceived.background = createGelBubbleDrawable(config.gelBubbleReceivedColor, isSent = false)
     }
 

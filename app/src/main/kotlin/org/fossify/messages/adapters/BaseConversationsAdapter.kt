@@ -70,6 +70,12 @@ abstract class BaseConversationsAdapter(
         notifyDataSetChanged()
     }
 
+    @SuppressLint("NotifyDataSetChanged")
+    fun updateGelColors() {
+        // Every letter avatar changes together; preserve the list and scroll position.
+        notifyDataSetChanged()
+    }
+
     fun updateConversations(
         newConversations: ArrayList<Conversation>,
         commitCallback: (() -> Unit)? = null,

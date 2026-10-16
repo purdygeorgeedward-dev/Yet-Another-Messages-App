@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gel_colors_heading">Gel colors</string>
+    <string name="gel_bubble_sent_color">Sent bubble color</string>
+    <string name="gel_avatar_color">Letter avatar color</string>
+    <string name="gel_accent_color">Header and controls color</string>
+    <string name="gel_palette_choose">Choose a gel palette</string>
+    <string name="gel_palette_reset">Restore bright defaults</string>
+    <string name="gel_palette_candy">Candy glass</string>
+    <string name="gel_palette_tropical">Tropical</string>
+    <string name="gel_palette_sunset">Sunset</string>
+    <string name="gel_palette_ocean">Ocean</string>
+</resources>

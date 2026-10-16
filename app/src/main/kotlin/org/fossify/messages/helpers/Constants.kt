@@ -50,7 +50,10 @@ const val IS_LAUNCHED_FROM_SHORTCUT = "is_launched_from_shortcut"
 const val KEEP_CONVERSATIONS_ARCHIVED = "keep_conversations_archived"
 const val GEL_BUBBLE_THEME = "gel_bubble_theme"
 const val GEL_BUBBLE_RECEIVED_COLOR = "gel_bubble_received_color"
-const val DEFAULT_GEL_BUBBLE_RECEIVED_COLOR = 0xFF0EA5E9.toInt()
+const val DEFAULT_GEL_BUBBLE_RECEIVED_COLOR = 0xFF0084E8.toInt()
+val DEFAULT_GEL_BUBBLE_SENT_COLOR = 0xFFA52CFA.toInt()
+val DEFAULT_GEL_AVATAR_COLOR = 0xFFF50075.toInt()
+val DEFAULT_GEL_ACCENT_COLOR = 0xFF27B9F2.toInt()
 const val GEL_BUBBLE_HUE_SHIFT = "gel_bubble_hue_shift"
 
 private const val PATH = "org.fossify.org.fossify.messages.action."

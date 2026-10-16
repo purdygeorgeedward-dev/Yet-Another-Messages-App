@@ -483,7 +483,7 @@ class ThreadAdapter(
                 applyTo(threadMessageHolder)
             }
 
-            val primaryColor = activity.getProperPrimaryColor()
+            val primaryColor = if (activity.config.gelBubbleTheme) activity.config.gelBubbleSentColor else activity.getProperPrimaryColor()
             val contrastColor = if (activity.config.gelBubbleTheme) {
                 activity.getGelBubbleTextColor(primaryColor)
             } else {
