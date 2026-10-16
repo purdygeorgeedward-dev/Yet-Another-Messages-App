@@ -285,13 +285,19 @@ class ThreadActivity : SimpleActivity() {
         maybeSetupRecycleBinView()
     }
 
+    @SuppressLint("NotifyDataSetChanged")
     override fun onResume() {
         super.onResume()
         val style = config.gelStyleSignature()
         if (lastGelStyle != null && lastGelStyle != style) {
-            lastGelStyle = style
-            recreate()
-            return
+            if (lastGelStyle?.substringBefore(":") != config.gelBubbleTheme.toString()) {
+                lastGelStyle = style
+                recreate()
+                return
+            }
+            // A palette change only needs a visual rebind. Keep attachments,
+            // scheduled-send state, typed text and the current scroll position.
+            binding.threadMessagesList.adapter?.notifyDataSetChanged()
         }
         lastGelStyle = style
         setupTopAppBar(
