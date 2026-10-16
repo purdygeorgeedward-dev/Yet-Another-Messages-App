@@ -39,7 +39,7 @@ public class GelRenderTest {
         Bitmap image = Bitmap.createBitmap(720, 1280, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(image);
         canvas.drawColor(0xFFF6FAFF);
-        int blue = 0xFF0EA5E9, slate = 0xFF607D9A, pink = 0xFFEF006B, ice = 0xFF48BEF5;
+        int blue = 0xFF0084E8, slate = 0xFF607D9A, pink = 0xFFEF006B, ice = 0xFF48BEF5;
         surface(canvas, ice, true, false, false, 8, 8, 704, 110);
         text(canvas, "\u2039   ChatGPT", 0xFF003E73, 38, 36, 34, 500);
         text(canvas, "\u260e  \u22ee", 0xFF003E73, 34, 565, 35, 130);
@@ -50,7 +50,7 @@ public class GelRenderTest {
             int y = 140 + 185 * i;
             canvas.drawBitmap(avatar, null, new Rect(24, y, 132, y + 108), null);
             surface(canvas, blue, false, false, false, 140, y, 470, 122);
-            text(canvas, "Your message appears here.\nBright blue glass gel.", Color.WHITE, 28, 165, y + 30, 425);
+            text(canvas, "Your message appears here.\nBright blue glass gel.", GelBubbleKt.getGelBubbleTextColor(context, blue), 28, 165, y + 30, 425);
             text(canvas, "03:" + (10 + i) + " AM", 0xFF344B63, 24, 285, y + 135, 250);
         }
         surface(canvas, slate, false, false, false, 218, 906, 484, 126);

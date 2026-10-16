@@ -39,7 +39,11 @@ fun Context.createGelSurfaceDrawable(baseColor: Int, pale: Boolean = false, roun
 /** Letter placeholders share the bubble material. Real contact photos remain unchanged. */
 fun Context.createGelContactIcon(name: String, original: Bitmap): Bitmap {
     val size = original.width
-    val color = getGelBubbleEffectiveColor(original.getPixel(size / 2, (original.height / 8).coerceAtLeast(1)))
+    val hsv = FloatArray(3)
+    Color.colorToHSV(getGelBubbleEffectiveColor(original.getPixel(size / 2, (original.height / 8).coerceAtLeast(1))), hsv)
+    hsv[1] = hsv[1].coerceAtLeast(0.90f)
+    hsv[2] = hsv[2].coerceAtLeast(0.96f)
+    val color = Color.HSVToColor(hsv)
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     GlassGelDrawable(color, resources.displayMetrics.density, round = true).apply {
@@ -47,7 +51,7 @@ fun Context.createGelContactIcon(name: String, original: Bitmap): Bitmap {
         draw(canvas)
     }
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        this.color = getGelBubbleTextColor(original.getPixel(size / 2, (original.height / 8).coerceAtLeast(1)))
+        this.color = if (ColorUtils.calculateContrast(Color.WHITE, mix(color, Color.BLACK, 0.2f)) >= 4.5) Color.WHITE else Color.BLACK
         textSize = size * 0.46f
         textAlign = Paint.Align.CENTER
         typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)

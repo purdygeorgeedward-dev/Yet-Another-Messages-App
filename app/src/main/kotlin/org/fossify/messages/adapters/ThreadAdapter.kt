@@ -625,7 +625,7 @@ class ThreadAdapter(
                 )
                 setTextSize(TypedValue.COMPLEX_UNIT_PX, fontSize)
             }
-            threadDateTime.setTextColor(textColor)
+            threadDateTime.setTextColor(if (activity.config.gelBubbleTheme) Color.rgb(45, 69, 92) else textColor)
 
             threadSimIcon.beVisibleIf(hasMultipleSIMCards)
             threadSimNumber.beVisibleIf(hasMultipleSIMCards)
@@ -640,7 +640,7 @@ class ThreadAdapter(
     private fun setupThreadSuccess(view: View, isDelivered: Boolean) {
         ItemThreadSuccessBinding.bind(view).apply {
             threadSuccess.setImageResource(if (isDelivered) R.drawable.ic_check_double_vector else org.fossify.commons.R.drawable.ic_check_vector)
-            threadSuccess.applyColorFilter(textColor)
+            threadSuccess.applyColorFilter(if (activity.config.gelBubbleTheme) Color.rgb(0, 62, 115) else textColor)
         }
     }
 
