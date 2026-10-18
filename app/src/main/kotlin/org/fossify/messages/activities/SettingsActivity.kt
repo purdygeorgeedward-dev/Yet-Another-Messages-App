@@ -2,6 +2,7 @@ package org.fossify.messages.activities
 
 import android.content.Intent
 import android.os.Bundle
+import android.graphics.Color
 import android.widget.SeekBar
 import androidx.activity.result.contract.ActivityResultContracts
 import org.fossify.commons.activities.ManageBlockedNumbersActivity
@@ -126,6 +127,7 @@ class SettingsActivity : SimpleActivity() {
         setupGelBubbleTheme()
         setupGelBubbleReceivedColor()
         setupGelBubbleHueShift()
+        setupGelColorPresets()
         setupLockScreenVisibility()
         setupMMSFileSizeLimit()
         setupUseRecycleBin()
@@ -370,6 +372,35 @@ class SettingsActivity : SimpleActivity() {
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
+    }
+
+    // Long-press the hue control to choose a coordinated color preset.
+    // Both settings are existing persisted preferences, so no migration is needed.
+    private fun setupGelColorPresets() = binding.apply {
+        settingsGelBubbleHueHolder.setOnLongClickListener {
+            val presets = listOf(
+                "Sapphire" to Color.rgb(45, 115, 235),
+                "Emerald" to Color.rgb(25, 177, 125),
+                "Ruby" to Color.rgb(218, 62, 95),
+                "Amethyst" to Color.rgb(147, 88, 211),
+                "Amber" to Color.rgb(240, 165, 47),
+                "Turquoise" to Color.rgb(40, 190, 200)
+            )
+            val items = ArrayList(presets.mapIndexed { index, preset ->
+                RadioItem(index, preset.first)
+            })
+            RadioGroupDialog(this@SettingsActivity, items, -1) { selection ->
+                val index = selection as Int
+                if (index in presets.indices) {
+                    config.gelBubbleReceivedColor = presets[index].second
+                    config.gelBubbleHueShift = 0
+                    settingsGelBubbleHueSeekbar.progress = 0
+                    settingsGelBubbleReceivedColorSwatch.background.applyColorFilter(presets[index].second)
+                    updateGelBubbleHuePreview()
+                }
+            }
+            true
+        }
     }
 
     private fun updateGelBubbleHuePreview() = binding.apply {
