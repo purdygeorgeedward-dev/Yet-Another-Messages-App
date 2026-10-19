@@ -21,6 +21,9 @@ fun Context.getGelBubbleEffectiveColor(baseColor: Int): Int =
     baseColor.rotateHue(config.gelBubbleHueShift)
 
 /**
+ * Gel bubble v4 (Oct 19, 2026): true pill (radius = half height, up to 40dp), whole body
+ * domed, broad soft sheen + wrapping end reflections, lit stem, and glow/shadow drawn
+ * outside the view (item_message.xml / activity_thread.xml set clipChildren=false).
  * Gel bubble v3 (Oct 19, 2026): pill body, tapered rounded stem, deep saturated edges,
  * internal caustic glow, top specular line + end crescents, coloured light cast below.
  * Gel bubble v2 (Oct 19, 2026).
@@ -34,11 +37,22 @@ fun Context.createGelBubbleDrawable(baseColor: Int, isSent: Boolean): Drawable =
 
 // Geometry the shader and the fallback share, in dp. The view padding below
 // adds these so text stays centred inside the visible bubble.
-private const val GEL_TAIL_DP = 10f
-private const val GEL_TOP_DP = 2f
-private const val GEL_BOTTOM_DP = 10f
-private const val GEL_SIDE_DP = 1f
-private const val GEL_MAX_RADIUS_DP = 26f
+// private const val GEL_TAIL_DP = 10f   // v3
+// private const val GEL_TOP_DP = 2f
+// private const val GEL_BOTTOM_DP = 10f
+// private const val GEL_SIDE_DP = 1f
+// private const val GEL_MAX_RADIUS_DP = 26f
+private const val GEL_TAIL_DP = 9f
+private const val GEL_TOP_DP = 0f
+private const val GEL_BOTTOM_DP = 0f
+private const val GEL_SIDE_DP = 0f
+private const val GEL_MAX_RADIUS_DP = 40f
+// Extra horizontal text inset so text clears the fully round ends.
+private const val GEL_END_INSET_DP = 8f
+// How far glow/shadow may spill outside the view.
+private const val GEL_SPILL_SIDE_DP = 14f
+private const val GEL_SPILL_TOP_DP = 8f
+private const val GEL_SPILL_BOTTOM_DP = 26f
 
 /** Gel mode: padding that clears the stem and glow margin, white text with a soft shadow. */
 fun TextView.applyGelBubbleText(isSent: Boolean) {
@@ -46,8 +60,9 @@ fun TextView.applyGelBubbleText(isSent: Boolean) {
     val base = resources.getDimensionPixelSize(org.fossify.commons.R.dimen.normal_margin)
     val tail = (GEL_TAIL_DP * d).toInt()
     val side = (GEL_SIDE_DP * d).toInt()
-    val start = base + if (isSent) side else tail
-    val end = base + if (isSent) tail else side
+    val inset = (GEL_END_INSET_DP * d).toInt()
+    val start = base + inset + if (isSent) side else tail
+    val end = base + inset + if (isSent) tail else side
     setPaddingRelative(start, base + (GEL_TOP_DP * d).toInt(), end, base + (GEL_BOTTOM_DP * d).toInt())
     setTextColor(Color.WHITE)
     setLinkTextColor(Color.WHITE)
@@ -98,7 +113,10 @@ private class GelBubbleDrawableV2(
         s.setFloatUniform("sent", if (sent) 1f else 0f)
         paint.shader = s
         paint.alpha = alphaValue
-        canvas.drawRect(0f, 0f, w, h, paint)
+        // canvas.drawRect(0f, 0f, w, h, paint)   // v3: glow confined to the view
+        val d = density
+        canvas.drawRect(-GEL_SPILL_SIDE_DP * d, -GEL_SPILL_TOP_DP * d,
+            w + GEL_SPILL_SIDE_DP * d, h + GEL_SPILL_BOTTOM_DP * d, paint)
         paint.shader = null
     }
 
@@ -173,27 +191,17 @@ uniform float3 baseColor;
 uniform float dp;
 uniform float sent;
 
+// Coordinates are the view's own: (0,0)-(size). The bubble fills that box except
+// the stem column; glow and shadow are drawn OUTSIDE it (parents don't clip).
+
 float sdRoundBox(float2 p, float2 c, float2 b, float r) {
     float2 q = abs(p - c) - b + r;
     return length(max(q, float2(0.0))) + min(max(q.x, q.y), 0.0) - r;
 }
 
-float sdTri(float2 p, float2 a, float2 b, float2 c) {
-    float2 e0 = b - a; float2 e1 = c - b; float2 e2 = a - c;
-    float2 v0 = p - a; float2 v1 = p - b; float2 v2 = p - c;
-    float2 q0 = v0 - e0 * clamp(dot(v0, e0) / dot(e0, e0), 0.0, 1.0);
-    float2 q1 = v1 - e1 * clamp(dot(v1, e1) / dot(e1, e1), 0.0, 1.0);
-    float2 q2 = v2 - e2 * clamp(dot(v2, e2) / dot(e2, e2), 0.0, 1.0);
-    float s = sign(e0.x * e2.y - e0.y * e2.x);
-    float2 d = min(min(float2(dot(q0, q0), s * (v0.x * e0.y - v0.y * e0.x)),
-                       float2(dot(q1, q1), s * (v1.x * e1.y - v1.y * e1.x))),
-                       float2(dot(q2, q2), s * (v2.x * e2.y - v2.y * e2.x)));
-    return -sqrt(d.x) * sign(d.y);
-}
-
 float cro(float2 a, float2 b) { return a.x * b.y - a.y * b.x; }
 
-// Tapered capsule (iq): rounded stem, thick at the body, thin at the tip.
+// Tapered capsule (iq): thick where it joins the body, thin at the tip.
 float sdUnevenCapsule(float2 p, float2 pa, float2 pb, float ra, float rb) {
     p -= pa; pb -= pa;
     float h = dot(pb, pb);
@@ -214,34 +222,37 @@ float smin(float a, float b, float k) {
     return mix(b, a, h) - k * h * (1.0 - h);
 }
 
-// Layout shared by every function: margins are fixed in dp.
-float tailW() { return 10.0 * dp; }
-float bodyBottom() { return size.y - 10.0 * dp; }
-float bodyTop() { return 2.0 * dp; }
+float radiusFor(float bh) { return min(bh * 0.5, 40.0 * dp); }
+
+float bodySdf(float2 p) {
+    float W = size.x; float H = size.y;
+    float t = 9.0 * dp;
+    float x0 = sent > 0.5 ? 0.0 : t;
+    float x1 = sent > 0.5 ? W - t : W;
+    return sdRoundBox(p, float2((x0 + x1) * 0.5, H * 0.5), float2((x1 - x0) * 0.5, H * 0.5), radiusFor(H));
+}
 
 float shapeSdf(float2 p) {
-    float W = size.x;
-    float t = tailW();
-    float y0 = bodyTop(); float y1 = bodyBottom();
-    float x0 = sent > 0.5 ? 1.0 * dp : t;
-    float x1 = sent > 0.5 ? W - t : W - 1.0 * dp;
-    float bh = y1 - y0;
-    float r = min(26.0 * dp, bh * 0.5);
-    float d = sdRoundBox(p, float2((x0 + x1) * 0.5, (y0 + y1) * 0.5), float2((x1 - x0) * 0.5, bh * 0.5), r);
+    float W = size.x; float H = size.y;
+    float t = 9.0 * dp;
+    float x0 = sent > 0.5 ? 0.0 : t;
+    float x1 = sent > 0.5 ? W - t : W;
+    float r = radiusFor(H);
+    float d = sdRoundBox(p, float2((x0 + x1) * 0.5, H * 0.5), float2((x1 - x0) * 0.5, H * 0.5), r);
+    // Stem grows out of the lower corner like a drip of the same gel.
+    float sr = min(r * 0.55, 11.0 * dp);
     float stem;
     if (sent > 0.5) {
-        stem = sdUnevenCapsule(p, float2(x1 - 9.0 * dp, y1 - 9.0 * dp), float2(W - 3.5 * dp, y1 - 1.0 * dp), 8.0 * dp, 2.2 * dp);
+        stem = sdUnevenCapsule(p, float2(x1 - sr * 1.1, H - sr * 1.05), float2(W - 2.6 * dp, H - 2.4 * dp), sr, 2.4 * dp);
     } else {
-        stem = sdUnevenCapsule(p, float2(x0 + 9.0 * dp, y1 - 9.0 * dp), float2(3.5 * dp, y1 - 1.0 * dp), 8.0 * dp, 2.2 * dp);
+        stem = sdUnevenCapsule(p, float2(x0 + sr * 1.1, H - sr * 1.05), float2(2.6 * dp, H - 2.4 * dp), sr, 2.4 * dp);
     }
-    return smin(d, stem, 6.0 * dp);
+    return smin(d, stem, 9.0 * dp);
 }
 
 half4 main(float2 p) {
     float W = size.x; float H = size.y;
-    float y0 = bodyTop(); float y1 = bodyBottom();
-    float bh = y1 - y0;
-    float R = min(26.0 * dp, bh * 0.5);
+    float R = radiusFor(H);
 
     float d = shapeSdf(p);
     float e = 1.0 * dp;
@@ -249,69 +260,220 @@ half4 main(float2 p) {
                       shapeSdf(p + float2(0.0, e)) - shapeSdf(p - float2(0.0, e)));
     g = g / (length(g) + 1e-5);
 
-    // Inflated pill: round cross-section across the whole bevel.
+    // Inflated cross-section over the full radius: the whole body is curved.
     float s = clamp(-d / R, 0.0, 1.0);
     float z = sqrt(max(1.0 - (1.0 - s) * (1.0 - s), 1e-4));
     float slope = (1.0 - s) / z;
     float3 n = normalize(float3(g * slope, 1.0));
 
     float3 base = clamp(baseColor, 0.02, 1.0);
-    float3 light = mix(base, float3(1.0), 0.55);
-    float3 glowC = clamp(base * 1.35 + float3(0.18), 0.0, 1.0);   // saturated, luminous
-
-    // Zone shading by distance from the edge (s: 0 at edge, 1 inside the bevel).
-    // Edges run deep and saturated, the centre glows (Beer-Lambert style).
     float3 absorb = -log(base);
-    // Absorption alone drifts pink toward crimson and blue toward indigo, so the
-    // deep tone is pulled back toward the picked colour to keep its hue.
+    float3 glowC = clamp(base * 1.35 + float3(0.18), 0.0, 1.0);
+
+    // Body: deep saturated rim, luminous core (hue held, not drifting).
     float3 deep = mix(exp(-absorb * 2.6), base * 0.62, 0.45);
-    float3 col = mix(deep, exp(-absorb * 0.80), smoothstep(0.0, 1.0, s));
+    float3 core = exp(-absorb * 0.75);
+    float3 col = mix(deep, core, smoothstep(0.0, 0.85, s));
 
-    // Light enters from above, exits low: lower body brightens.
-    float vy = clamp((p.y - y0) / bh, 0.0, 1.0);
-    col = mix(col, glowC, smoothstep(0.45, 1.0, vy) * 0.30 * s);
+    // Volume: soft diffuse from an overhead light across the whole dome,
+    // so the middle reads as rounded, darker under the top, brighter low down.
+    float3 L = normalize(float3(-0.25, -0.75, 0.62));
+    float lam = dot(n, L);
+    col *= mix(0.80, 1.08, smoothstep(-0.2, 0.9, lam));
+    float vy = clamp(p.y / H, 0.0, 1.0);
+    col = mix(col, glowC, smoothstep(0.45, 1.0, vy) * 0.38 * smoothstep(0.1, 0.8, s));
 
-    // Internal caustic: a glowing band set in from the lower edge.
+    // Light focused inside the lower edge (caustic) and catching the bottom rim.
     float lower = smoothstep(0.05, 0.9, g.y);
-    float caus = exp(-pow((s - 0.22) / 0.09, 2.0)) * lower;
-    col = mix(col, glowC, caus * 0.65);
-    // Transmitted light catching the very bottom rim.
-    float rimB = exp(-pow((s - 0.035) / 0.03, 2.0)) * lower;
-    col = mix(col, glowC, rimB * 0.40);
+    col = mix(col, glowC, exp(-pow((s - 0.22) / 0.10, 2.0)) * lower * 0.70);
+    col = mix(col, glowC, exp(-pow((s - 0.035) / 0.03, 2.0)) * lower * 0.45);
 
-    // Top: thin specular line riding the edge, crescents on the rounded ends,
-    // and a faint broad glare. Widths are in dp, so nothing widens when stretched.
-    float upper = smoothstep(-0.25, -0.95, g.y);
-    float topLine = exp(-pow((s - 0.07) / 0.035, 2.0)) * upper;
-    float arcBand = exp(-pow((s - 0.13) / 0.06, 2.0));
-    float crescL = arcBand * smoothstep(0.55, 0.95, dot(g, normalize(float2(-0.80, -0.60))));
-    float crescR = arcBand * smoothstep(0.70, 0.97, dot(g, normalize(float2(0.80, -0.60))));
-    float glare = exp(-pow((s - 0.45) / 0.25, 2.0)) * upper * 0.12;
-    col = mix(col, float3(1.0), clamp(topLine * 0.70 + crescL * 0.95 + crescR * 0.75 + glare, 0.0, 1.0));
-    // Keep the outermost pixel deep so the silhouette reads crisp.
+    // Reflections. Broad soft sheen across the upper body (window reflection),
+    // wide soft arcs wrapping both rounded ends, small hot spots, and a fine
+    // edge line. All sized from the radius, so they lengthen but never widen.
+    float upper = smoothstep(-0.10, -0.85, g.y);
+    float sheen = exp(-pow((s - 0.42) / 0.20, 2.0)) * upper * smoothstep(0.0, 0.25, vy) * (1.0 - smoothstep(0.30, 0.55, vy));
+    float arc = exp(-pow((s - 0.17) / 0.10, 2.0));
+    float wrapL = arc * smoothstep(0.30, 0.92, dot(g, normalize(float2(-0.82, -0.57))));
+    float wrapR = arc * smoothstep(0.45, 0.95, dot(g, normalize(float2(0.82, -0.57))));
+    float hotL = exp(-pow((s - 0.20) / 0.06, 2.0)) * smoothstep(0.90, 0.99, dot(g, normalize(float2(-0.72, -0.69))));
+    float hotR = exp(-pow((s - 0.20) / 0.05, 2.0)) * smoothstep(0.93, 0.995, dot(g, normalize(float2(0.72, -0.69))));
+    float edgeLine = exp(-pow((s - 0.05) / 0.03, 2.0)) * upper;
+    // No reflections on the stem: it is thin, so they read as a white sliver.
+    float onStem = smoothstep(0.5 * dp, 4.0 * dp, bodySdf(p) - d);
+    float refl = (1.0 - onStem) * (sheen * 0.30 + wrapL * 0.38 + wrapR * 0.30 + hotL * 0.85 + hotR * 0.70 + edgeLine * 0.40);
+    col = mix(col, float3(1.0), clamp(refl, 0.0, 1.0));
+
+    // Keep the outermost pixel deep on the top half so the silhouette is crisp.
     col = mix(col, deep, exp(-pow(s / 0.02, 2.0)) * 0.6 * (1.0 - lower));
+    // Stem: same gel as the lower body (lit, not dark), fading in from the join.
+    col = mix(col, mix(base * 0.95, glowC, 0.25), onStem * 0.45);
     col = clamp(col, 0.0, 1.0);
 
     float cov = clamp(0.5 - d, 0.0, 1.0);
     float aIn = cov * mix(0.90, 0.97, z);
 
-    // Outside: soft contact shadow + coloured light cast through the gel.
-    float ds = shapeSdf(p - float2(0.0, 2.0 * dp));
-    float shadow = exp(-max(ds, 0.0) / (2.0 * dp)) * 0.14;
+    // Outside: contact shadow, tight coloured caustic, and a wide soft halo.
+    float ds = shapeSdf(p - float2(0.0, 2.5 * dp));
+    float shadow = (1.0 - smoothstep(-3.0 * dp, 6.0 * dp, ds)) * 0.13;
     float dc = shapeSdf(p - float2(0.0, 5.0 * dp));
-    float caustic = exp(-max(dc, 0.0) / (3.6 * dp)) * 0.85 * smoothstep(y0 + bh * 0.5, y1, p.y);
-    float fade = smoothstep(0.0, 2.5 * dp, min(min(p.x, W - p.x), min(p.y, H - p.y))) * (1.0 - cov);
-    shadow *= fade; caustic *= fade;
-    float3 cc = glowC;
-    float aOut = clamp(shadow + caustic, 0.0, 1.0);
-    float3 outRgb = cc * caustic;   // shadow is black, contributes alpha only
+    float below = smoothstep(H * 0.35, H, p.y);
+    float caustic = (1.0 - smoothstep(-6.0 * dp, 10.0 * dp, dc)) * 0.55 * below;
+    float dh = shapeSdf(p - float2(0.0, 6.0 * dp));
+    float halo = (1.0 - smoothstep(-2.0 * dp, 12.0 * dp, dh)) * 0.22;   // reaches 0 inside the drawn area
+    float outA = clamp(shadow + caustic + halo, 0.0, 1.0) * (1.0 - cov);
+    float3 outRgb = glowC * (caustic + halo) * (1.0 - cov);
 
     float3 rgb = col * aIn + outRgb * (1.0 - aIn);
-    return half4(half3(rgb), half(clamp(aIn + aOut * (1.0 - aIn), 0.0, 1.0)));
+    return half4(half3(rgb), half(clamp(aIn + outA * (1.0 - aIn), 0.0, 1.0)));
 }
 """
     }
 }
+
+// ---- v3 shader (commit 6c19b0c), kept for reference, no longer used ----
+//         private const val AGSL = """uniform float2 size;
+// uniform float3 baseColor;
+// uniform float dp;
+// uniform float sent;
+//
+// float sdRoundBox(float2 p, float2 c, float2 b, float r) {
+//     float2 q = abs(p - c) - b + r;
+//     return length(max(q, float2(0.0))) + min(max(q.x, q.y), 0.0) - r;
+// }
+//
+// float sdTri(float2 p, float2 a, float2 b, float2 c) {
+//     float2 e0 = b - a; float2 e1 = c - b; float2 e2 = a - c;
+//     float2 v0 = p - a; float2 v1 = p - b; float2 v2 = p - c;
+//     float2 q0 = v0 - e0 * clamp(dot(v0, e0) / dot(e0, e0), 0.0, 1.0);
+//     float2 q1 = v1 - e1 * clamp(dot(v1, e1) / dot(e1, e1), 0.0, 1.0);
+//     float2 q2 = v2 - e2 * clamp(dot(v2, e2) / dot(e2, e2), 0.0, 1.0);
+//     float s = sign(e0.x * e2.y - e0.y * e2.x);
+//     float2 d = min(min(float2(dot(q0, q0), s * (v0.x * e0.y - v0.y * e0.x)),
+//                        float2(dot(q1, q1), s * (v1.x * e1.y - v1.y * e1.x))),
+//                        float2(dot(q2, q2), s * (v2.x * e2.y - v2.y * e2.x)));
+//     return -sqrt(d.x) * sign(d.y);
+// }
+//
+// float cro(float2 a, float2 b) { return a.x * b.y - a.y * b.x; }
+//
+// // Tapered capsule (iq): rounded stem, thick at the body, thin at the tip.
+// float sdUnevenCapsule(float2 p, float2 pa, float2 pb, float ra, float rb) {
+//     p -= pa; pb -= pa;
+//     float h = dot(pb, pb);
+//     float2 q = float2(dot(p, float2(pb.y, -pb.x)), dot(p, pb)) / h;
+//     q.x = abs(q.x);
+//     float b = ra - rb;
+//     float2 c = float2(sqrt(max(h - b * b, 1e-4)), b);
+//     float k = cro(c, q);
+//     float m = dot(c, q);
+//     float n = dot(q, q);
+//     if (k < 0.0) return sqrt(h * n) - ra;
+//     if (k > c.x) return sqrt(h * (q.x * q.x + (q.y - 1.0) * (q.y - 1.0))) - rb;
+//     return m - ra;
+// }
+//
+// float smin(float a, float b, float k) {
+//     float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+//     return mix(b, a, h) - k * h * (1.0 - h);
+// }
+//
+// // Layout shared by every function: margins are fixed in dp.
+// float tailW() { return 10.0 * dp; }
+// float bodyBottom() { return size.y - 10.0 * dp; }
+// float bodyTop() { return 2.0 * dp; }
+//
+// float shapeSdf(float2 p) {
+//     float W = size.x;
+//     float t = tailW();
+//     float y0 = bodyTop(); float y1 = bodyBottom();
+//     float x0 = sent > 0.5 ? 1.0 * dp : t;
+//     float x1 = sent > 0.5 ? W - t : W - 1.0 * dp;
+//     float bh = y1 - y0;
+//     float r = min(26.0 * dp, bh * 0.5);
+//     float d = sdRoundBox(p, float2((x0 + x1) * 0.5, (y0 + y1) * 0.5), float2((x1 - x0) * 0.5, bh * 0.5), r);
+//     float stem;
+//     if (sent > 0.5) {
+//         stem = sdUnevenCapsule(p, float2(x1 - 9.0 * dp, y1 - 9.0 * dp), float2(W - 3.5 * dp, y1 - 1.0 * dp), 8.0 * dp, 2.2 * dp);
+//     } else {
+//         stem = sdUnevenCapsule(p, float2(x0 + 9.0 * dp, y1 - 9.0 * dp), float2(3.5 * dp, y1 - 1.0 * dp), 8.0 * dp, 2.2 * dp);
+//     }
+//     return smin(d, stem, 6.0 * dp);
+// }
+//
+// half4 main(float2 p) {
+//     float W = size.x; float H = size.y;
+//     float y0 = bodyTop(); float y1 = bodyBottom();
+//     float bh = y1 - y0;
+//     float R = min(26.0 * dp, bh * 0.5);
+//
+//     float d = shapeSdf(p);
+//     float e = 1.0 * dp;
+//     float2 g = float2(shapeSdf(p + float2(e, 0.0)) - shapeSdf(p - float2(e, 0.0)),
+//                       shapeSdf(p + float2(0.0, e)) - shapeSdf(p - float2(0.0, e)));
+//     g = g / (length(g) + 1e-5);
+//
+//     // Inflated pill: round cross-section across the whole bevel.
+//     float s = clamp(-d / R, 0.0, 1.0);
+//     float z = sqrt(max(1.0 - (1.0 - s) * (1.0 - s), 1e-4));
+//     float slope = (1.0 - s) / z;
+//     float3 n = normalize(float3(g * slope, 1.0));
+//
+//     float3 base = clamp(baseColor, 0.02, 1.0);
+//     float3 light = mix(base, float3(1.0), 0.55);
+//     float3 glowC = clamp(base * 1.35 + float3(0.18), 0.0, 1.0);   // saturated, luminous
+//
+//     // Zone shading by distance from the edge (s: 0 at edge, 1 inside the bevel).
+//     // Edges run deep and saturated, the centre glows (Beer-Lambert style).
+//     float3 absorb = -log(base);
+//     // Absorption alone drifts pink toward crimson and blue toward indigo, so the
+//     // deep tone is pulled back toward the picked colour to keep its hue.
+//     float3 deep = mix(exp(-absorb * 2.6), base * 0.62, 0.45);
+//     float3 col = mix(deep, exp(-absorb * 0.80), smoothstep(0.0, 1.0, s));
+//
+//     // Light enters from above, exits low: lower body brightens.
+//     float vy = clamp((p.y - y0) / bh, 0.0, 1.0);
+//     col = mix(col, glowC, smoothstep(0.45, 1.0, vy) * 0.30 * s);
+//
+//     // Internal caustic: a glowing band set in from the lower edge.
+//     float lower = smoothstep(0.05, 0.9, g.y);
+//     float caus = exp(-pow((s - 0.22) / 0.09, 2.0)) * lower;
+//     col = mix(col, glowC, caus * 0.65);
+//     // Transmitted light catching the very bottom rim.
+//     float rimB = exp(-pow((s - 0.035) / 0.03, 2.0)) * lower;
+//     col = mix(col, glowC, rimB * 0.40);
+//
+//     // Top: thin specular line riding the edge, crescents on the rounded ends,
+//     // and a faint broad glare. Widths are in dp, so nothing widens when stretched.
+//     float upper = smoothstep(-0.25, -0.95, g.y);
+//     float topLine = exp(-pow((s - 0.07) / 0.035, 2.0)) * upper;
+//     float arcBand = exp(-pow((s - 0.13) / 0.06, 2.0));
+//     float crescL = arcBand * smoothstep(0.55, 0.95, dot(g, normalize(float2(-0.80, -0.60))));
+//     float crescR = arcBand * smoothstep(0.70, 0.97, dot(g, normalize(float2(0.80, -0.60))));
+//     float glare = exp(-pow((s - 0.45) / 0.25, 2.0)) * upper * 0.12;
+//     col = mix(col, float3(1.0), clamp(topLine * 0.70 + crescL * 0.95 + crescR * 0.75 + glare, 0.0, 1.0));
+//     // Keep the outermost pixel deep so the silhouette reads crisp.
+//     col = mix(col, deep, exp(-pow(s / 0.02, 2.0)) * 0.6 * (1.0 - lower));
+//     col = clamp(col, 0.0, 1.0);
+//
+//     float cov = clamp(0.5 - d, 0.0, 1.0);
+//     float aIn = cov * mix(0.90, 0.97, z);
+//
+//     // Outside: soft contact shadow + coloured light cast through the gel.
+//     float ds = shapeSdf(p - float2(0.0, 2.0 * dp));
+//     float shadow = exp(-max(ds, 0.0) / (2.0 * dp)) * 0.14;
+//     float dc = shapeSdf(p - float2(0.0, 5.0 * dp));
+//     float caustic = exp(-max(dc, 0.0) / (3.6 * dp)) * 0.85 * smoothstep(y0 + bh * 0.5, y1, p.y);
+//     float fade = smoothstep(0.0, 2.5 * dp, min(min(p.x, W - p.x), min(p.y, H - p.y))) * (1.0 - cov);
+//     shadow *= fade; caustic *= fade;
+//     float3 cc = glowC;
+//     float aOut = clamp(shadow + caustic, 0.0, 1.0);
+//     float3 outRgb = cc * caustic;   // shadow is black, contributes alpha only
+//
+//     float3 rgb = col * aIn + outRgb * (1.0 - aIn);
+//     return half4(half3(rgb), half(clamp(aIn + aOut * (1.0 - aIn), 0.0, 1.0)));
+// }
+// """
 
 // ---- v2 shader (commit 77211fe), kept for reference, no longer used ----
 //         private const val AGSL = """
