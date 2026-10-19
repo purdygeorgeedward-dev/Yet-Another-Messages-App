@@ -12,6 +12,7 @@ import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
 import android.os.Build
+import android.widget.TextView
 import androidx.annotation.RequiresApi
 import org.fossify.commons.extensions.rotateHue
 import kotlin.math.min
@@ -20,6 +21,8 @@ fun Context.getGelBubbleEffectiveColor(baseColor: Int): Int =
     baseColor.rotateHue(config.gelBubbleHueShift)
 
 /**
+ * Gel bubble v3 (Oct 19, 2026): pill body, tapered rounded stem, deep saturated edges,
+ * internal caustic glow, top specular line + end crescents, coloured light cast below.
  * Gel bubble v2 (Oct 19, 2026).
  * Shape (body + stem) is a signed distance field measured in pixels, so corners,
  * stem, rim and highlight margins keep their size at any bubble length; only the
@@ -28,6 +31,35 @@ fun Context.getGelBubbleEffectiveColor(baseColor: Int): Int =
  */
 fun Context.createGelBubbleDrawable(baseColor: Int, isSent: Boolean): Drawable =
     GelBubbleDrawableV2(getGelBubbleEffectiveColor(baseColor), isSent, resources.displayMetrics.density)
+
+// Geometry the shader and the fallback share, in dp. The view padding below
+// adds these so text stays centred inside the visible bubble.
+private const val GEL_TAIL_DP = 10f
+private const val GEL_TOP_DP = 2f
+private const val GEL_BOTTOM_DP = 10f
+private const val GEL_SIDE_DP = 1f
+private const val GEL_MAX_RADIUS_DP = 26f
+
+/** Gel mode: padding that clears the stem and glow margin, white text with a soft shadow. */
+fun TextView.applyGelBubbleText(isSent: Boolean) {
+    val d = resources.displayMetrics.density
+    val base = resources.getDimensionPixelSize(org.fossify.commons.R.dimen.normal_margin)
+    val tail = (GEL_TAIL_DP * d).toInt()
+    val side = (GEL_SIDE_DP * d).toInt()
+    val start = base + if (isSent) side else tail
+    val end = base + if (isSent) tail else side
+    setPaddingRelative(start, base + (GEL_TOP_DP * d).toInt(), end, base + (GEL_BOTTOM_DP * d).toInt())
+    setTextColor(Color.WHITE)
+    setLinkTextColor(Color.WHITE)
+    setShadowLayer(2.5f * d, 0f, 1.2f * d, Color.argb(110, 0, 0, 0))
+}
+
+/** Normal mode: undo the gel padding and shadow (views are recycled). */
+fun TextView.clearGelBubbleText() {
+    val base = resources.getDimensionPixelSize(org.fossify.commons.R.dimen.normal_margin)
+    setPaddingRelative(base, base, base, base)
+    setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT)
+}
 
 private class GelBubbleDrawableV2(
     private val color: Int,
@@ -73,12 +105,18 @@ private class GelBubbleDrawableV2(
     // Pre-Android 13: same layout, single unioned outline (no seam), flat gradients.
     private fun drawFallback(canvas: Canvas, w: Float, h: Float) {
         val dp = density
-        val tail = min(10f * dp, w * .15f)
-        val bottom = h - 4f * dp
-        val left = if (sent) 0f else tail
-        val right = if (sent) w - tail else w
-        val radius = min(20f * dp, bottom * .5f)
-        val body = Path().apply { addRoundRect(RectF(left, 0f, right, bottom), radius, radius, Path.Direction.CW) }
+        // val tail = min(10f * dp, w * .15f)   // v2 geometry
+        // val bottom = h - 4f * dp
+        // val left = if (sent) 0f else tail
+        // val right = if (sent) w - tail else w
+        // val radius = min(20f * dp, bottom * .5f)
+        val tail = GEL_TAIL_DP * dp
+        val top = GEL_TOP_DP * dp
+        val bottom = h - GEL_BOTTOM_DP * dp
+        val left = if (sent) GEL_SIDE_DP * dp else tail
+        val right = if (sent) w - tail else w - GEL_SIDE_DP * dp
+        val radius = min(GEL_MAX_RADIUS_DP * dp, (bottom - top) * .5f)
+        val body = Path().apply { addRoundRect(RectF(left, top, right, bottom), radius, radius, Path.Direction.CW) }
         val stem = Path()
         if (sent) {
             stem.moveTo(right - radius * .9f, bottom - radius * 1.1f)
@@ -130,8 +168,7 @@ private class GelBubbleDrawableV2(
         private fun sharedShader(): RuntimeShader =
             (cached as? RuntimeShader) ?: RuntimeShader(AGSL).also { cached = it }
 
-        private const val AGSL = """
-uniform float2 size;
+        private const val AGSL = """uniform float2 size;
 uniform float3 baseColor;
 uniform float dp;
 uniform float sent;
@@ -154,92 +191,237 @@ float sdTri(float2 p, float2 a, float2 b, float2 c) {
     return -sqrt(d.x) * sign(d.y);
 }
 
+float cro(float2 a, float2 b) { return a.x * b.y - a.y * b.x; }
+
+// Tapered capsule (iq): rounded stem, thick at the body, thin at the tip.
+float sdUnevenCapsule(float2 p, float2 pa, float2 pb, float ra, float rb) {
+    p -= pa; pb -= pa;
+    float h = dot(pb, pb);
+    float2 q = float2(dot(p, float2(pb.y, -pb.x)), dot(p, pb)) / h;
+    q.x = abs(q.x);
+    float b = ra - rb;
+    float2 c = float2(sqrt(max(h - b * b, 1e-4)), b);
+    float k = cro(c, q);
+    float m = dot(c, q);
+    float n = dot(q, q);
+    if (k < 0.0) return sqrt(h * n) - ra;
+    if (k > c.x) return sqrt(h * (q.x * q.x + (q.y - 1.0) * (q.y - 1.0))) - rb;
+    return m - ra;
+}
+
 float smin(float a, float b, float k) {
     float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
     return mix(b, a, h) - k * h * (1.0 - h);
 }
 
+// Layout shared by every function: margins are fixed in dp.
+float tailW() { return 10.0 * dp; }
+float bodyBottom() { return size.y - 10.0 * dp; }
+float bodyTop() { return 2.0 * dp; }
+
 float shapeSdf(float2 p) {
-    float W = size.x; float H = size.y;
-    float t = min(10.0 * dp, W * 0.15);
-    float y1 = H - 4.0 * dp;
-    float x0 = sent > 0.5 ? 0.0 : t;
-    float x1 = sent > 0.5 ? W - t : W;
-    float r = min(20.0 * dp, y1 * 0.5);
-    float d = sdRoundBox(p, float2((x0 + x1) * 0.5, y1 * 0.5), float2((x1 - x0) * 0.5, y1 * 0.5), r);
-    float tri;
+    float W = size.x;
+    float t = tailW();
+    float y0 = bodyTop(); float y1 = bodyBottom();
+    float x0 = sent > 0.5 ? 1.0 * dp : t;
+    float x1 = sent > 0.5 ? W - t : W - 1.0 * dp;
+    float bh = y1 - y0;
+    float r = min(26.0 * dp, bh * 0.5);
+    float d = sdRoundBox(p, float2((x0 + x1) * 0.5, (y0 + y1) * 0.5), float2((x1 - x0) * 0.5, bh * 0.5), r);
+    float stem;
     if (sent > 0.5) {
-        tri = sdTri(p, float2(x1 - r * 0.9, y1 - r * 1.1), float2(x1 - r * 0.9, y1), float2(W - dp, y1));
+        stem = sdUnevenCapsule(p, float2(x1 - 9.0 * dp, y1 - 9.0 * dp), float2(W - 3.5 * dp, y1 - 1.0 * dp), 8.0 * dp, 2.2 * dp);
     } else {
-        tri = sdTri(p, float2(x0 + r * 0.9, y1 - r * 1.1), float2(dp, y1), float2(x0 + r * 0.9, y1));
+        stem = sdUnevenCapsule(p, float2(x0 + 9.0 * dp, y1 - 9.0 * dp), float2(3.5 * dp, y1 - 1.0 * dp), 8.0 * dp, 2.2 * dp);
     }
-    return smin(d, tri - 1.2 * dp, r * 0.75);
+    return smin(d, stem, 6.0 * dp);
 }
 
 half4 main(float2 p) {
     float W = size.x; float H = size.y;
-    float t = min(10.0 * dp, W * 0.15);
-    float y1 = H - 4.0 * dp;
-    float x0 = sent > 0.5 ? 0.0 : t;
-    float x1 = sent > 0.5 ? W - t : W;
-    float bh = y1;
-    float r = min(20.0 * dp, bh * 0.5);
-    float R = r * 0.95;
+    float y0 = bodyTop(); float y1 = bodyBottom();
+    float bh = y1 - y0;
+    float R = min(26.0 * dp, bh * 0.5);
 
     float d = shapeSdf(p);
-    float e = 1.2 * dp;
+    float e = 1.0 * dp;
     float2 g = float2(shapeSdf(p + float2(e, 0.0)) - shapeSdf(p - float2(e, 0.0)),
                       shapeSdf(p + float2(0.0, e)) - shapeSdf(p - float2(0.0, e)));
     g = g / (length(g) + 1e-5);
 
-    // Inflated cross-section: circular dome over the bevel width, flat beyond it.
+    // Inflated pill: round cross-section across the whole bevel.
     float s = clamp(-d / R, 0.0, 1.0);
     float z = sqrt(max(1.0 - (1.0 - s) * (1.0 - s), 1e-4));
     float slope = (1.0 - s) / z;
     float3 n = normalize(float3(g * slope, 1.0));
 
-    float3 base = baseColor;
-    float lum = dot(base, float3(0.299, 0.587, 0.114));
-    float3 deep = clamp(mix(float3(lum), base, 1.35) * 0.62, 0.0, 1.0);
-    float3 light = mix(base, float3(1.0), 0.45);
-    float3 col = mix(deep, base * 1.04, smoothstep(0.0, 1.0, z));
+    float3 base = clamp(baseColor, 0.02, 1.0);
+    float3 light = mix(base, float3(1.0), 0.55);
+    float3 glowC = clamp(base * 1.35 + float3(0.18), 0.0, 1.0);   // saturated, luminous
 
-    // Transmitted light pooling along the lower inside edge.
-    float pool = smoothstep(0.05, 0.85, clamp(n.y, 0.0, 1.0)) * pow(max(1.0 - z, 0.0), 0.6);
-    col = mix(col, light, pool * 0.75);
+    // Zone shading by distance from the edge (s: 0 at edge, 1 inside the bevel).
+    // Edges run deep and saturated, the centre glows (Beer-Lambert style).
+    float3 absorb = -log(base);
+    // Absorption alone drifts pink toward crimson and blue toward indigo, so the
+    // deep tone is pulled back toward the picked colour to keep its hue.
+    float3 deep = mix(exp(-absorb * 2.6), base * 0.62, 0.45);
+    float3 col = mix(deep, exp(-absorb * 0.80), smoothstep(0.0, 1.0, s));
 
-    // Broad inner glow low in the body.
-    float iy = (p.y - (y1 - bh * 0.28)) / (bh * 0.30);
-    col += (light - base) * exp(-iy * iy) * z * 0.45;
+    // Light enters from above, exits low: lower body brightens.
+    float vy = clamp((p.y - y0) / bh, 0.0, 1.0);
+    col = mix(col, glowC, smoothstep(0.45, 1.0, vy) * 0.30 * s);
 
-    // Top highlight: inset box with fixed pixel margins, so its ends never stretch.
-    float hx0 = x0 + R * 0.32; float hx1 = x1 - R * 0.32;
-    float hy0 = R * 0.10; float hy1 = bh * 0.56;
-    float hd = sdRoundBox(p, float2((hx0 + hx1) * 0.5, (hy0 + hy1) * 0.5),
-                          float2((hx1 - hx0) * 0.5, (hy1 - hy0) * 0.5), min(R * 0.85, (hy1 - hy0) * 0.5));
-    float hmask = smoothstep(2.5 * dp, -7.0 * dp, hd);
-    float vfade = clamp(1.0 - (p.y - hy0) / (hy1 - hy0), 0.0, 1.0);
-    col = mix(col, float3(1.0), hmask * (0.05 + 0.72 * pow(vfade, 2.2)));
+    // Internal caustic: a glowing band set in from the lower edge.
+    float lower = smoothstep(0.05, 0.9, g.y);
+    float caus = exp(-pow((s - 0.22) / 0.09, 2.0)) * lower;
+    col = mix(col, glowC, caus * 0.65);
+    // Transmitted light catching the very bottom rim.
+    float rimB = exp(-pow((s - 0.035) / 0.03, 2.0)) * lower;
+    col = mix(col, glowC, rimB * 0.40);
 
-    // Sharp specular rim.
-    float3 Hh = normalize(normalize(float3(-0.35, -0.75, 0.56)) + float3(0.0, 0.0, 1.0));
-    col += pow(max(dot(n, Hh), 0.0), 40.0) * 0.55;
+    // Top: thin specular line riding the edge, crescents on the rounded ends,
+    // and a faint broad glare. Widths are in dp, so nothing widens when stretched.
+    float upper = smoothstep(-0.25, -0.95, g.y);
+    float topLine = exp(-pow((s - 0.07) / 0.035, 2.0)) * upper;
+    float arcBand = exp(-pow((s - 0.13) / 0.06, 2.0));
+    float crescL = arcBand * smoothstep(0.55, 0.95, dot(g, normalize(float2(-0.80, -0.60))));
+    float crescR = arcBand * smoothstep(0.70, 0.97, dot(g, normalize(float2(0.80, -0.60))));
+    float glare = exp(-pow((s - 0.45) / 0.25, 2.0)) * upper * 0.12;
+    col = mix(col, float3(1.0), clamp(topLine * 0.70 + crescL * 0.95 + crescR * 0.75 + glare, 0.0, 1.0));
+    // Keep the outermost pixel deep so the silhouette reads crisp.
+    col = mix(col, deep, exp(-pow(s / 0.02, 2.0)) * 0.6 * (1.0 - lower));
     col = clamp(col, 0.0, 1.0);
 
     float cov = clamp(0.5 - d, 0.0, 1.0);
-    float aIn = cov * mix(0.88, 0.97, z);
+    float aIn = cov * mix(0.90, 0.97, z);
 
-    // Soft coloured glow under the bubble, faded out before the view edge.
-    float dg = shapeSdf(p - float2(0.0, 1.5 * dp));
-    float edge = smoothstep(0.0, 2.5 * dp, min(min(p.x, W - p.x), min(p.y, H - p.y)));
-    float glow = exp(-max(dg, 0.0) / (1.8 * dp)) * 0.40 * (1.0 - cov) * edge;
+    // Outside: soft contact shadow + coloured light cast through the gel.
+    float ds = shapeSdf(p - float2(0.0, 2.0 * dp));
+    float shadow = exp(-max(ds, 0.0) / (2.0 * dp)) * 0.14;
+    float dc = shapeSdf(p - float2(0.0, 5.0 * dp));
+    float caustic = exp(-max(dc, 0.0) / (3.6 * dp)) * 0.85 * smoothstep(y0 + bh * 0.5, y1, p.y);
+    float fade = smoothstep(0.0, 2.5 * dp, min(min(p.x, W - p.x), min(p.y, H - p.y))) * (1.0 - cov);
+    shadow *= fade; caustic *= fade;
+    float3 cc = glowC;
+    float aOut = clamp(shadow + caustic, 0.0, 1.0);
+    float3 outRgb = cc * caustic;   // shadow is black, contributes alpha only
 
-    float3 rgb = col * aIn + base * 0.9 * glow;
-    return half4(half3(rgb), half(clamp(aIn + glow, 0.0, 1.0)));
+    float3 rgb = col * aIn + outRgb * (1.0 - aIn);
+    return half4(half3(rgb), half(clamp(aIn + aOut * (1.0 - aIn), 0.0, 1.0)));
 }
 """
     }
 }
+
+// ---- v2 shader (commit 77211fe), kept for reference, no longer used ----
+//         private const val AGSL = """
+// uniform float2 size;
+// uniform float3 baseColor;
+// uniform float dp;
+// uniform float sent;
+//
+// float sdRoundBox(float2 p, float2 c, float2 b, float r) {
+//     float2 q = abs(p - c) - b + r;
+//     return length(max(q, float2(0.0))) + min(max(q.x, q.y), 0.0) - r;
+// }
+//
+// float sdTri(float2 p, float2 a, float2 b, float2 c) {
+//     float2 e0 = b - a; float2 e1 = c - b; float2 e2 = a - c;
+//     float2 v0 = p - a; float2 v1 = p - b; float2 v2 = p - c;
+//     float2 q0 = v0 - e0 * clamp(dot(v0, e0) / dot(e0, e0), 0.0, 1.0);
+//     float2 q1 = v1 - e1 * clamp(dot(v1, e1) / dot(e1, e1), 0.0, 1.0);
+//     float2 q2 = v2 - e2 * clamp(dot(v2, e2) / dot(e2, e2), 0.0, 1.0);
+//     float s = sign(e0.x * e2.y - e0.y * e2.x);
+//     float2 d = min(min(float2(dot(q0, q0), s * (v0.x * e0.y - v0.y * e0.x)),
+//                        float2(dot(q1, q1), s * (v1.x * e1.y - v1.y * e1.x))),
+//                        float2(dot(q2, q2), s * (v2.x * e2.y - v2.y * e2.x)));
+//     return -sqrt(d.x) * sign(d.y);
+// }
+//
+// float smin(float a, float b, float k) {
+//     float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+//     return mix(b, a, h) - k * h * (1.0 - h);
+// }
+//
+// float shapeSdf(float2 p) {
+//     float W = size.x; float H = size.y;
+//     float t = min(10.0 * dp, W * 0.15);
+//     float y1 = H - 4.0 * dp;
+//     float x0 = sent > 0.5 ? 0.0 : t;
+//     float x1 = sent > 0.5 ? W - t : W;
+//     float r = min(20.0 * dp, y1 * 0.5);
+//     float d = sdRoundBox(p, float2((x0 + x1) * 0.5, y1 * 0.5), float2((x1 - x0) * 0.5, y1 * 0.5), r);
+//     float tri;
+//     if (sent > 0.5) {
+//         tri = sdTri(p, float2(x1 - r * 0.9, y1 - r * 1.1), float2(x1 - r * 0.9, y1), float2(W - dp, y1));
+//     } else {
+//         tri = sdTri(p, float2(x0 + r * 0.9, y1 - r * 1.1), float2(dp, y1), float2(x0 + r * 0.9, y1));
+//     }
+//     return smin(d, tri - 1.2 * dp, r * 0.75);
+// }
+//
+// half4 main(float2 p) {
+//     float W = size.x; float H = size.y;
+//     float t = min(10.0 * dp, W * 0.15);
+//     float y1 = H - 4.0 * dp;
+//     float x0 = sent > 0.5 ? 0.0 : t;
+//     float x1 = sent > 0.5 ? W - t : W;
+//     float bh = y1;
+//     float r = min(20.0 * dp, bh * 0.5);
+//     float R = r * 0.95;
+//
+//     float d = shapeSdf(p);
+//     float e = 1.2 * dp;
+//     float2 g = float2(shapeSdf(p + float2(e, 0.0)) - shapeSdf(p - float2(e, 0.0)),
+//                       shapeSdf(p + float2(0.0, e)) - shapeSdf(p - float2(0.0, e)));
+//     g = g / (length(g) + 1e-5);
+//
+//     // Inflated cross-section: circular dome over the bevel width, flat beyond it.
+//     float s = clamp(-d / R, 0.0, 1.0);
+//     float z = sqrt(max(1.0 - (1.0 - s) * (1.0 - s), 1e-4));
+//     float slope = (1.0 - s) / z;
+//     float3 n = normalize(float3(g * slope, 1.0));
+//
+//     float3 base = baseColor;
+//     float lum = dot(base, float3(0.299, 0.587, 0.114));
+//     float3 deep = clamp(mix(float3(lum), base, 1.35) * 0.62, 0.0, 1.0);
+//     float3 light = mix(base, float3(1.0), 0.45);
+//     float3 col = mix(deep, base * 1.04, smoothstep(0.0, 1.0, z));
+//
+//     // Transmitted light pooling along the lower inside edge.
+//     float pool = smoothstep(0.05, 0.85, clamp(n.y, 0.0, 1.0)) * pow(max(1.0 - z, 0.0), 0.6);
+//     col = mix(col, light, pool * 0.75);
+//
+//     // Broad inner glow low in the body.
+//     float iy = (p.y - (y1 - bh * 0.28)) / (bh * 0.30);
+//     col += (light - base) * exp(-iy * iy) * z * 0.45;
+//
+//     // Top highlight: inset box with fixed pixel margins, so its ends never stretch.
+//     float hx0 = x0 + R * 0.32; float hx1 = x1 - R * 0.32;
+//     float hy0 = R * 0.10; float hy1 = bh * 0.56;
+//     float hd = sdRoundBox(p, float2((hx0 + hx1) * 0.5, (hy0 + hy1) * 0.5),
+//                           float2((hx1 - hx0) * 0.5, (hy1 - hy0) * 0.5), min(R * 0.85, (hy1 - hy0) * 0.5));
+//     float hmask = smoothstep(2.5 * dp, -7.0 * dp, hd);
+//     float vfade = clamp(1.0 - (p.y - hy0) / (hy1 - hy0), 0.0, 1.0);
+//     col = mix(col, float3(1.0), hmask * (0.05 + 0.72 * pow(vfade, 2.2)));
+//
+//     // Sharp specular rim.
+//     float3 Hh = normalize(normalize(float3(-0.35, -0.75, 0.56)) + float3(0.0, 0.0, 1.0));
+//     col += pow(max(dot(n, Hh), 0.0), 40.0) * 0.55;
+//     col = clamp(col, 0.0, 1.0);
+//
+//     float cov = clamp(0.5 - d, 0.0, 1.0);
+//     float aIn = cov * mix(0.88, 0.97, z);
+//
+//     // Soft coloured glow under the bubble, faded out before the view edge.
+//     float dg = shapeSdf(p - float2(0.0, 1.5 * dp));
+//     float edge = smoothstep(0.0, 2.5 * dp, min(min(p.x, W - p.x), min(p.y, H - p.y)));
+//     float glow = exp(-max(dg, 0.0) / (1.8 * dp)) * 0.40 * (1.0 - cov) * edge;
+//
+//     float3 rgb = col * aIn + base * 0.9 * glow;
+//     return half4(half3(rgb), half(clamp(aIn + glow, 0.0, 1.0)));
+// }
+// """
 
 // ---- v1 renderer (commit aed787e), kept for reference, no longer used ----
 // private class GelBubbleDrawable(

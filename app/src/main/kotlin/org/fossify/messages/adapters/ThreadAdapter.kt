@@ -65,6 +65,8 @@ import org.fossify.messages.dialogs.SelectTextDialog
 import org.fossify.messages.extensions.config
 import org.fossify.messages.extensions.createGelBubbleDrawable
 import org.fossify.messages.extensions.getGelBubbleEffectiveColor
+import org.fossify.messages.extensions.applyGelBubbleText
+import org.fossify.messages.extensions.clearGelBubbleText
 import org.fossify.messages.extensions.getContactFromAddress
 import org.fossify.messages.extensions.isImageMimeType
 import org.fossify.messages.extensions.isVCardMimeType
@@ -430,11 +432,13 @@ class ThreadAdapter(
             threadMessageBody.apply {
                 if (activity.config.gelBubbleTheme) {
                     val baseColor = activity.config.gelBubbleReceivedColor
-                    val receivedContrastColor = activity.getGelBubbleEffectiveColor(baseColor).getContrastColor()
+                    // val receivedContrastColor = activity.getGelBubbleEffectiveColor(baseColor).getContrastColor()
                     background = activity.createGelBubbleDrawable(baseColor, isSent = false)
-                    setTextColor(receivedContrastColor)
-                    setLinkTextColor(receivedContrastColor)
+                    // setTextColor(receivedContrastColor)
+                    // setLinkTextColor(receivedContrastColor)
+                    applyGelBubbleText(isSent = false)
                 } else {
+                    clearGelBubbleText()
                     background = AppCompatResources.getDrawable(activity, R.drawable.item_received_background)
                     setTextColor(textColor)
                     setLinkTextColor(activity.getProperPrimaryColor())
@@ -471,7 +475,8 @@ class ThreadAdapter(
 
             val primaryColor = activity.getProperPrimaryColor()
             val contrastColor = if (activity.config.gelBubbleTheme) {
-                activity.getGelBubbleEffectiveColor(primaryColor).getContrastColor()
+                // activity.getGelBubbleEffectiveColor(primaryColor).getContrastColor()
+                Color.WHITE // gel bubbles always use white text
             } else {
                 primaryColor.getContrastColor()
             }
@@ -482,14 +487,24 @@ class ThreadAdapter(
                     addRule(RelativeLayout.ALIGN_PARENT_END)
                 }
 
+                // if (activity.config.gelBubbleTheme) {
+                //     background = activity.createGelBubbleDrawable(primaryColor, isSent = true)
+                // } else {
+                //     background = AppCompatResources.getDrawable(activity, R.drawable.item_sent_background)
+                //     background.applyColorFilter(primaryColor)
+                // }
+                // setTextColor(contrastColor)
+                // setLinkTextColor(contrastColor)
                 if (activity.config.gelBubbleTheme) {
                     background = activity.createGelBubbleDrawable(primaryColor, isSent = true)
+                    applyGelBubbleText(isSent = true)
                 } else {
+                    clearGelBubbleText()
                     background = AppCompatResources.getDrawable(activity, R.drawable.item_sent_background)
                     background.applyColorFilter(primaryColor)
+                    setTextColor(contrastColor)
+                    setLinkTextColor(contrastColor)
                 }
-                setTextColor(contrastColor)
-                setLinkTextColor(contrastColor)
 
                 if (message.isScheduled) {
                     typeface = Typeface.create(FontHelper.getTypeface(activity), Typeface.ITALIC)
