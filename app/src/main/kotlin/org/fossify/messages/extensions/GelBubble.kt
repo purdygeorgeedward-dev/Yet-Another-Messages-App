@@ -21,6 +21,10 @@ fun Context.getGelBubbleEffectiveColor(baseColor: Int): Int =
     baseColor.rotateHue(config.gelBubbleHueShift)
 
 /**
+ * Gel bubble v6 (Oct 19, 2026): looser, organic look. No outline-tracing bands; the
+ * surface reflects a soft studio (overhead softbox + uneven windows) through its own
+ * curvature, light soaks through as one soft uneven glow, low-frequency noise breaks
+ * up perfect evenness.
  * Gel bubble v5 (Oct 19, 2026): rounded surface instead of flat: stronger top-lit
  * shading, darker dip under the bulge, gloss streak driven by surface curvature.
  * Gel bubble v4 (Oct 19, 2026): true pill (radius = half height, up to 40dp), whole body
@@ -219,6 +223,31 @@ float sdUnevenCapsule(float2 p, float2 pa, float2 pb, float ra, float rb) {
     return m - ra;
 }
 
+// Smooth value noise, measured in pixels, for organic unevenness.
+float hash(float2 q) { return fract(sin(dot(q, float2(127.1, 311.7))) * 43758.5453); }
+float vnoise(float2 q) {
+    float2 i = floor(q); float2 f = fract(q);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + float2(1.0, 0.0)), f.x),
+               mix(hash(i + float2(0.0, 1.0)), hash(i + float2(1.0, 1.0)), f.x), f.y);
+}
+
+// What the gel reflects: a soft studio, not lines. Two large irregular window
+// lights up top, a bright sky gradient, coloured bounce from below.
+float3 envLight(float3 r, float3 tint, float wob) {
+    float sky = smoothstep(0.15, -0.65, r.y);
+    // Long overhead softbox: becomes a glossy band riding the top curve.
+    float2 w0 = (r.xy - float2(-0.08, -0.80)) / float2(0.95, 0.20);
+    float win0 = exp(-pow(dot(w0, w0), 1.5) * (1.4 + wob * 0.8));
+    // Big window upper-left, smaller one upper-right: uneven, like a real room.
+    float2 w1 = (r.xy - float2(-0.62, -0.55)) / float2(0.30, 0.26);
+    float win1 = exp(-pow(dot(w1, w1), 1.3) * (1.3 + wob));
+    float2 w2 = (r.xy - float2(0.66, -0.50)) / float2(0.17, 0.15);
+    float win2 = exp(-pow(dot(w2, w2), 1.5) * (1.8 - wob));
+    float bounce = smoothstep(0.05, 0.75, r.y);
+    return float3(1.0) * (win0 * 0.85 + win1 * 1.10 + win2 * 0.85 + sky * 0.14) + tint * bounce * 0.55;
+}
+
 float smin(float a, float b, float k) {
     float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
     return mix(b, a, h) - k * h * (1.0 - h);
@@ -262,77 +291,58 @@ half4 main(float2 p) {
                       shapeSdf(p + float2(0.0, e)) - shapeSdf(p - float2(0.0, e)));
     g = g / (length(g) + 1e-5);
 
-    // Inflated cross-section over the full radius: the whole body is curved.
+    // Inflated surface across the full radius.
     float s = clamp(-d / R, 0.0, 1.0);
     float z = sqrt(max(1.0 - (1.0 - s) * (1.0 - s), 1e-4));
     float slope = (1.0 - s) / z;
     float3 n = normalize(float3(g * slope, 1.0));
 
+    // Low-frequency wobble so nothing is perfectly even (pixel-scaled).
+    float nz1 = vnoise(p / (22.0 * dp));
+    float nz2 = vnoise(p / (9.0 * dp) + float2(7.3, 1.9));
+    float wob = (nz1 - 0.5) * 0.9 + (nz2 - 0.5) * 0.35;
+
     float3 base = clamp(baseColor, 0.02, 1.0);
     float3 absorb = -log(base);
     float3 glowC = clamp(base * 1.35 + float3(0.18), 0.0, 1.0);
 
-    // Body: deep saturated rim, luminous core (hue held, not drifting).
-    float3 deep = mix(exp(-absorb * 2.6), base * 0.62, 0.45);
-    float3 core = exp(-absorb * 0.75);
-    float3 col = mix(deep, core, smoothstep(0.0, 0.85, s));
+    // Body colour from how much gel the eye looks through: smooth, no bands.
+    float thick = mix(2.4, 0.78, pow(z, 0.9));
+    float3 col = mix(exp(-absorb * thick), base * mix(0.6, 1.05, z), 0.35);
 
-    // Volume: soft diffuse from an overhead light across the whole dome,
-    // so the middle reads as rounded, darker under the top, brighter low down.
-    float3 L = normalize(float3(-0.25, -0.75, 0.62));
-    float lam = dot(n, L);
-    col *= mix(0.62, 1.20, smoothstep(-0.3, 0.95, lam));
+    // Light soaking through and gathering low and slightly to one side,
+    // as one soft uneven glow rather than a ring.
     float vy = clamp(p.y / H, 0.0, 1.0);
-    col = mix(col, glowC, smoothstep(0.45, 1.0, vy) * 0.38 * smoothstep(0.1, 0.8, s));
+    float2 gc = float2(W * (sent > 0.5 ? 0.42 : 0.58), H * 0.92);
+    float2 gq = (p - gc) / float2(max(W * 0.55, 30.0 * dp), H * 0.55);
+    float soak = exp(-dot(gq, gq)) * (0.75 + wob * 0.5);
+    float down = smoothstep(-0.1, 0.9, n.y) * (1.0 - z * 0.6);
+    col = mix(col, glowC, clamp(soak * 0.45 + down * 0.40, 0.0, 0.85));
 
-    // Shade under the top bulge: the middle-low body dips darker before the
-    // lower glow, which is what makes the surface read as rounded, not flat.
-    float dip = exp(-pow((vy - 0.62) / 0.16, 2.0)) * smoothstep(0.3, 0.9, s);
-    col *= 1.0 - dip * 0.18;
+    // Top-lit roundness, kept gentle.
+    float lam = dot(n, normalize(float3(-0.3, -0.7, 0.65)));
+    col *= mix(0.80, 1.10, smoothstep(-0.4, 0.95, lam));
 
-    // Light focused inside the lower edge (caustic) and catching the bottom rim.
-    float lower = smoothstep(0.05, 0.9, g.y);
-    col = mix(col, glowC, exp(-pow((s - 0.22) / 0.10, 2.0)) * lower * 0.70);
-    col = mix(col, glowC, exp(-pow((s - 0.035) / 0.03, 2.0)) * lower * 0.45);
-
-    // Reflections. Broad soft sheen across the upper body (window reflection),
-    // wide soft arcs wrapping both rounded ends, small hot spots, and a fine
-    // edge line. All sized from the radius, so they lengthen but never widen.
-    float upper = smoothstep(-0.10, -0.85, g.y);
-    float sheen = exp(-pow((s - 0.42) / 0.20, 2.0)) * upper * smoothstep(0.0, 0.25, vy) * (1.0 - smoothstep(0.30, 0.55, vy));
-    float arc = exp(-pow((s - 0.17) / 0.10, 2.0));
-    float wrapL = arc * smoothstep(0.30, 0.92, dot(g, normalize(float2(-0.82, -0.57))));
-    float wrapR = arc * smoothstep(0.45, 0.95, dot(g, normalize(float2(0.82, -0.57))));
-    float hotL = exp(-pow((s - 0.20) / 0.06, 2.0)) * smoothstep(0.90, 0.99, dot(g, normalize(float2(-0.72, -0.69))));
-    float hotR = exp(-pow((s - 0.20) / 0.05, 2.0)) * smoothstep(0.93, 0.995, dot(g, normalize(float2(0.72, -0.69))));
-    float edgeLine = exp(-pow((s - 0.05) / 0.03, 2.0)) * upper;
-    // No reflections on the stem: it is thin, so they read as a white sliver.
+    // Reflections come from the environment through the curved surface, so
+    // they bend, pool and fade on their own; Fresnel makes the edges glossier.
+    float3 rr = 2.0 * n.z * n - float3(0.0, 0.0, 1.0);
+    float F = 0.06 + 0.94 * pow(1.0 - n.z, 4.0);
     float onStem = smoothstep(0.5 * dp, 4.0 * dp, bodySdf(p) - d);
-    // Glossy streak from the curvature itself: wherever the surface tilts up
-    // toward the light. Follows the dome, wraps the ends, never stretches wide.
-    float3 Hs = normalize(normalize(float3(-0.10, -0.80, 0.59)) + float3(0.0, 0.0, 1.0));
-    float gloss = pow(max(dot(n, Hs), 0.0), 26.0);
-    float topGrad = (1.0 - smoothstep(0.05, 0.48, vy)) * smoothstep(0.0, 0.10, vy) * smoothstep(0.15, 0.6, s);
-    float refl = (1.0 - onStem) * (gloss * 0.55 + topGrad * 0.22 + sheen * 0.30 + wrapL * 0.38 + wrapR * 0.30 + hotL * 0.85 + hotR * 0.70 + edgeLine * 0.40);
-    col = mix(col, float3(1.0), clamp(refl, 0.0, 1.0));
-
-    // Keep the outermost pixel deep on the top half so the silhouette is crisp.
-    col = mix(col, deep, exp(-pow(s / 0.02, 2.0)) * 0.6 * (1.0 - lower));
-    // Stem: same gel as the lower body (lit, not dark), fading in from the join.
-    col = mix(col, mix(base * 0.95, glowC, 0.25), onStem * 0.45);
+    float3 refl = envLight(rr, glowC, wob);
+    col += refl * mix(0.30, 1.0, F) * (1.0 - onStem * 0.7);
     col = clamp(col, 0.0, 1.0);
 
     float cov = clamp(0.5 - d, 0.0, 1.0);
     float aIn = cov * mix(0.90, 0.97, z);
 
-    // Outside: contact shadow, tight coloured caustic, and a wide soft halo.
+    // Outside: contact shadow, coloured light cast below, wide soft halo.
     float ds = shapeSdf(p - float2(0.0, 2.5 * dp));
-    float shadow = (1.0 - smoothstep(-3.0 * dp, 6.0 * dp, ds)) * 0.13;
+    float shadow = (1.0 - smoothstep(-3.0 * dp, 6.0 * dp, ds)) * 0.12;
     float dc = shapeSdf(p - float2(0.0, 5.0 * dp));
     float below = smoothstep(H * 0.35, H, p.y);
-    float caustic = (1.0 - smoothstep(-6.0 * dp, 10.0 * dp, dc)) * 0.55 * below;
+    float caustic = (1.0 - smoothstep(-6.0 * dp, 10.0 * dp, dc)) * 0.50 * below * (0.8 + wob * 0.4);
     float dh = shapeSdf(p - float2(0.0, 6.0 * dp));
-    float halo = (1.0 - smoothstep(-2.0 * dp, 12.0 * dp, dh)) * 0.22;   // reaches 0 inside the drawn area
+    float halo = (1.0 - smoothstep(-2.0 * dp, 12.0 * dp, dh)) * 0.20;
     float outA = clamp(shadow + caustic + halo, 0.0, 1.0) * (1.0 - cov);
     float3 outRgb = glowC * (caustic + halo) * (1.0 - cov);
 
@@ -342,6 +352,160 @@ half4 main(float2 p) {
 """
     }
 }
+
+// ---- v5 shader (commit 66a007b), kept for reference, no longer used ----
+//         private const val AGSL = """uniform float2 size;
+// uniform float3 baseColor;
+// uniform float dp;
+// uniform float sent;
+//
+// // Coordinates are the view's own: (0,0)-(size). The bubble fills that box except
+// // the stem column; glow and shadow are drawn OUTSIDE it (parents don't clip).
+//
+// float sdRoundBox(float2 p, float2 c, float2 b, float r) {
+//     float2 q = abs(p - c) - b + r;
+//     return length(max(q, float2(0.0))) + min(max(q.x, q.y), 0.0) - r;
+// }
+//
+// float cro(float2 a, float2 b) { return a.x * b.y - a.y * b.x; }
+//
+// // Tapered capsule (iq): thick where it joins the body, thin at the tip.
+// float sdUnevenCapsule(float2 p, float2 pa, float2 pb, float ra, float rb) {
+//     p -= pa; pb -= pa;
+//     float h = dot(pb, pb);
+//     float2 q = float2(dot(p, float2(pb.y, -pb.x)), dot(p, pb)) / h;
+//     q.x = abs(q.x);
+//     float b = ra - rb;
+//     float2 c = float2(sqrt(max(h - b * b, 1e-4)), b);
+//     float k = cro(c, q);
+//     float m = dot(c, q);
+//     float n = dot(q, q);
+//     if (k < 0.0) return sqrt(h * n) - ra;
+//     if (k > c.x) return sqrt(h * (q.x * q.x + (q.y - 1.0) * (q.y - 1.0))) - rb;
+//     return m - ra;
+// }
+//
+// float smin(float a, float b, float k) {
+//     float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+//     return mix(b, a, h) - k * h * (1.0 - h);
+// }
+//
+// float radiusFor(float bh) { return min(bh * 0.5, 40.0 * dp); }
+//
+// float bodySdf(float2 p) {
+//     float W = size.x; float H = size.y;
+//     float t = 9.0 * dp;
+//     float x0 = sent > 0.5 ? 0.0 : t;
+//     float x1 = sent > 0.5 ? W - t : W;
+//     return sdRoundBox(p, float2((x0 + x1) * 0.5, H * 0.5), float2((x1 - x0) * 0.5, H * 0.5), radiusFor(H));
+// }
+//
+// float shapeSdf(float2 p) {
+//     float W = size.x; float H = size.y;
+//     float t = 9.0 * dp;
+//     float x0 = sent > 0.5 ? 0.0 : t;
+//     float x1 = sent > 0.5 ? W - t : W;
+//     float r = radiusFor(H);
+//     float d = sdRoundBox(p, float2((x0 + x1) * 0.5, H * 0.5), float2((x1 - x0) * 0.5, H * 0.5), r);
+//     // Stem grows out of the lower corner like a drip of the same gel.
+//     float sr = min(r * 0.55, 11.0 * dp);
+//     float stem;
+//     if (sent > 0.5) {
+//         stem = sdUnevenCapsule(p, float2(x1 - sr * 1.1, H - sr * 1.05), float2(W - 2.6 * dp, H - 2.4 * dp), sr, 2.4 * dp);
+//     } else {
+//         stem = sdUnevenCapsule(p, float2(x0 + sr * 1.1, H - sr * 1.05), float2(2.6 * dp, H - 2.4 * dp), sr, 2.4 * dp);
+//     }
+//     return smin(d, stem, 9.0 * dp);
+// }
+//
+// half4 main(float2 p) {
+//     float W = size.x; float H = size.y;
+//     float R = radiusFor(H);
+//
+//     float d = shapeSdf(p);
+//     float e = 1.0 * dp;
+//     float2 g = float2(shapeSdf(p + float2(e, 0.0)) - shapeSdf(p - float2(e, 0.0)),
+//                       shapeSdf(p + float2(0.0, e)) - shapeSdf(p - float2(0.0, e)));
+//     g = g / (length(g) + 1e-5);
+//
+//     // Inflated cross-section over the full radius: the whole body is curved.
+//     float s = clamp(-d / R, 0.0, 1.0);
+//     float z = sqrt(max(1.0 - (1.0 - s) * (1.0 - s), 1e-4));
+//     float slope = (1.0 - s) / z;
+//     float3 n = normalize(float3(g * slope, 1.0));
+//
+//     float3 base = clamp(baseColor, 0.02, 1.0);
+//     float3 absorb = -log(base);
+//     float3 glowC = clamp(base * 1.35 + float3(0.18), 0.0, 1.0);
+//
+//     // Body: deep saturated rim, luminous core (hue held, not drifting).
+//     float3 deep = mix(exp(-absorb * 2.6), base * 0.62, 0.45);
+//     float3 core = exp(-absorb * 0.75);
+//     float3 col = mix(deep, core, smoothstep(0.0, 0.85, s));
+//
+//     // Volume: soft diffuse from an overhead light across the whole dome,
+//     // so the middle reads as rounded, darker under the top, brighter low down.
+//     float3 L = normalize(float3(-0.25, -0.75, 0.62));
+//     float lam = dot(n, L);
+//     col *= mix(0.62, 1.20, smoothstep(-0.3, 0.95, lam));
+//     float vy = clamp(p.y / H, 0.0, 1.0);
+//     col = mix(col, glowC, smoothstep(0.45, 1.0, vy) * 0.38 * smoothstep(0.1, 0.8, s));
+//
+//     // Shade under the top bulge: the middle-low body dips darker before the
+//     // lower glow, which is what makes the surface read as rounded, not flat.
+//     float dip = exp(-pow((vy - 0.62) / 0.16, 2.0)) * smoothstep(0.3, 0.9, s);
+//     col *= 1.0 - dip * 0.18;
+//
+//     // Light focused inside the lower edge (caustic) and catching the bottom rim.
+//     float lower = smoothstep(0.05, 0.9, g.y);
+//     col = mix(col, glowC, exp(-pow((s - 0.22) / 0.10, 2.0)) * lower * 0.70);
+//     col = mix(col, glowC, exp(-pow((s - 0.035) / 0.03, 2.0)) * lower * 0.45);
+//
+//     // Reflections. Broad soft sheen across the upper body (window reflection),
+//     // wide soft arcs wrapping both rounded ends, small hot spots, and a fine
+//     // edge line. All sized from the radius, so they lengthen but never widen.
+//     float upper = smoothstep(-0.10, -0.85, g.y);
+//     float sheen = exp(-pow((s - 0.42) / 0.20, 2.0)) * upper * smoothstep(0.0, 0.25, vy) * (1.0 - smoothstep(0.30, 0.55, vy));
+//     float arc = exp(-pow((s - 0.17) / 0.10, 2.0));
+//     float wrapL = arc * smoothstep(0.30, 0.92, dot(g, normalize(float2(-0.82, -0.57))));
+//     float wrapR = arc * smoothstep(0.45, 0.95, dot(g, normalize(float2(0.82, -0.57))));
+//     float hotL = exp(-pow((s - 0.20) / 0.06, 2.0)) * smoothstep(0.90, 0.99, dot(g, normalize(float2(-0.72, -0.69))));
+//     float hotR = exp(-pow((s - 0.20) / 0.05, 2.0)) * smoothstep(0.93, 0.995, dot(g, normalize(float2(0.72, -0.69))));
+//     float edgeLine = exp(-pow((s - 0.05) / 0.03, 2.0)) * upper;
+//     // No reflections on the stem: it is thin, so they read as a white sliver.
+//     float onStem = smoothstep(0.5 * dp, 4.0 * dp, bodySdf(p) - d);
+//     // Glossy streak from the curvature itself: wherever the surface tilts up
+//     // toward the light. Follows the dome, wraps the ends, never stretches wide.
+//     float3 Hs = normalize(normalize(float3(-0.10, -0.80, 0.59)) + float3(0.0, 0.0, 1.0));
+//     float gloss = pow(max(dot(n, Hs), 0.0), 26.0);
+//     float topGrad = (1.0 - smoothstep(0.05, 0.48, vy)) * smoothstep(0.0, 0.10, vy) * smoothstep(0.15, 0.6, s);
+//     float refl = (1.0 - onStem) * (gloss * 0.55 + topGrad * 0.22 + sheen * 0.30 + wrapL * 0.38 + wrapR * 0.30 + hotL * 0.85 + hotR * 0.70 + edgeLine * 0.40);
+//     col = mix(col, float3(1.0), clamp(refl, 0.0, 1.0));
+//
+//     // Keep the outermost pixel deep on the top half so the silhouette is crisp.
+//     col = mix(col, deep, exp(-pow(s / 0.02, 2.0)) * 0.6 * (1.0 - lower));
+//     // Stem: same gel as the lower body (lit, not dark), fading in from the join.
+//     col = mix(col, mix(base * 0.95, glowC, 0.25), onStem * 0.45);
+//     col = clamp(col, 0.0, 1.0);
+//
+//     float cov = clamp(0.5 - d, 0.0, 1.0);
+//     float aIn = cov * mix(0.90, 0.97, z);
+//
+//     // Outside: contact shadow, tight coloured caustic, and a wide soft halo.
+//     float ds = shapeSdf(p - float2(0.0, 2.5 * dp));
+//     float shadow = (1.0 - smoothstep(-3.0 * dp, 6.0 * dp, ds)) * 0.13;
+//     float dc = shapeSdf(p - float2(0.0, 5.0 * dp));
+//     float below = smoothstep(H * 0.35, H, p.y);
+//     float caustic = (1.0 - smoothstep(-6.0 * dp, 10.0 * dp, dc)) * 0.55 * below;
+//     float dh = shapeSdf(p - float2(0.0, 6.0 * dp));
+//     float halo = (1.0 - smoothstep(-2.0 * dp, 12.0 * dp, dh)) * 0.22;   // reaches 0 inside the drawn area
+//     float outA = clamp(shadow + caustic + halo, 0.0, 1.0) * (1.0 - cov);
+//     float3 outRgb = glowC * (caustic + halo) * (1.0 - cov);
+//
+//     float3 rgb = col * aIn + outRgb * (1.0 - aIn);
+//     return half4(half3(rgb), half(clamp(aIn + outA * (1.0 - aIn), 0.0, 1.0)));
+// }
+// """
 
 // ---- v4 shader (commit c2ee5ad), kept for reference, no longer used ----
 //         private const val AGSL = """uniform float2 size;
