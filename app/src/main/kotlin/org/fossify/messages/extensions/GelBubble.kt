@@ -21,6 +21,8 @@ fun Context.getGelBubbleEffectiveColor(baseColor: Int): Int =
     baseColor.rotateHue(config.gelBubbleHueShift)
 
 /**
+ * Gel bubble v7 (Oct 19, 2026): reflected light sources have defined edges (soft
+ * gaussian falloff read as airbrush); higher contrast between deep edges and core.
  * Gel bubble v6 (Oct 19, 2026): looser, organic look. No outline-tracing bands; the
  * surface reflects a soft studio (overhead softbox + uneven windows) through its own
  * curvature, light soaks through as one soft uneven glow, low-frequency noise breaks
@@ -234,18 +236,26 @@ float vnoise(float2 q) {
 
 // What the gel reflects: a soft studio, not lines. Two large irregular window
 // lights up top, a bright sky gradient, coloured bounce from below.
+// What the gel reflects: real light sources with defined edges. Soft gaussian
+// falloff is what reads as airbrush; hard-edged shapes read as gloss.
+float boxIn(float2 q, float2 c, float2 h, float rad, float soft) {
+    float2 k = abs(q - c) - h + rad;
+    float dd = length(max(k, float2(0.0))) + min(max(k.x, k.y), 0.0) - rad;
+    return 1.0 - smoothstep(-soft, soft, dd);
+}
+
 float3 envLight(float3 r, float3 tint, float wob) {
-    float sky = smoothstep(0.15, -0.65, r.y);
-    // Long overhead softbox: becomes a glossy band riding the top curve.
-    float2 w0 = (r.xy - float2(-0.08, -0.80)) / float2(0.95, 0.20);
-    float win0 = exp(-pow(dot(w0, w0), 1.5) * (1.4 + wob * 0.8));
-    // Big window upper-left, smaller one upper-right: uneven, like a real room.
-    float2 w1 = (r.xy - float2(-0.62, -0.55)) / float2(0.30, 0.26);
-    float win1 = exp(-pow(dot(w1, w1), 1.3) * (1.3 + wob));
-    float2 w2 = (r.xy - float2(0.66, -0.50)) / float2(0.17, 0.15);
-    float win2 = exp(-pow(dot(w2, w2), 1.5) * (1.8 - wob));
-    float bounce = smoothstep(0.05, 0.75, r.y);
-    return float3(1.0) * (win0 * 0.85 + win1 * 1.10 + win2 * 0.85 + sky * 0.14) + tint * bounce * 0.55;
+    float2 q = r.xy;
+    // Long overhead softbox -> crisp glossy band riding the top curve.
+    float win0 = boxIn(q, float2(-0.05, -0.90), float2(0.78, 0.16), 0.12, 0.03) * (0.55 + 0.45 * smoothstep(0.7, -0.5, q.x));
+    // Upper-left window (brightest), upper-right smaller one.
+    float win1 = boxIn(q, float2(-0.64, -0.56), float2(0.17, 0.14), 0.08, 0.02 + wob * 0.01);
+    float win2 = boxIn(q, float2(0.68, -0.50), float2(0.09, 0.08), 0.05, 0.02);
+    // Faint secondary glow around the windows (bloom), much weaker.
+    float bloom = exp(-dot(q - float2(-0.4, -0.7), q - float2(-0.4, -0.7)) * 3.0) * 0.12;
+    float sky = smoothstep(0.10, -0.70, q.y) * 0.10;
+    float bounce = smoothstep(0.10, 0.80, q.y);
+    return float3(1.0) * (win0 * 0.70 + win1 * 1.20 + win2 * 1.0 + bloom + sky) + tint * bounce * 0.60;
 }
 
 float smin(float a, float b, float k) {
@@ -307,8 +317,8 @@ half4 main(float2 p) {
     float3 glowC = clamp(base * 1.35 + float3(0.18), 0.0, 1.0);
 
     // Body colour from how much gel the eye looks through: smooth, no bands.
-    float thick = mix(2.4, 0.78, pow(z, 0.9));
-    float3 col = mix(exp(-absorb * thick), base * mix(0.6, 1.05, z), 0.35);
+    float thick = mix(3.0, 0.70, pow(z, 0.85));
+    float3 col = mix(exp(-absorb * thick), base * mix(0.5, 1.08, z), 0.30);
 
     // Light soaking through and gathering low and slightly to one side,
     // as one soft uneven glow rather than a ring.
@@ -329,7 +339,7 @@ half4 main(float2 p) {
     float F = 0.06 + 0.94 * pow(1.0 - n.z, 4.0);
     float onStem = smoothstep(0.5 * dp, 4.0 * dp, bodySdf(p) - d);
     float3 refl = envLight(rr, glowC, wob);
-    col += refl * mix(0.30, 1.0, F) * (1.0 - onStem * 0.7);
+    col += refl * mix(0.55, 1.0, F) * (1.0 - onStem * 0.7);
     col = clamp(col, 0.0, 1.0);
 
     float cov = clamp(0.5 - d, 0.0, 1.0);
@@ -352,6 +362,166 @@ half4 main(float2 p) {
 """
     }
 }
+
+// ---- v6 shader (commit 82b1a72), kept for reference, no longer used ----
+//         private const val AGSL = """uniform float2 size;
+// uniform float3 baseColor;
+// uniform float dp;
+// uniform float sent;
+//
+// // Coordinates are the view's own: (0,0)-(size). The bubble fills that box except
+// // the stem column; glow and shadow are drawn OUTSIDE it (parents don't clip).
+//
+// float sdRoundBox(float2 p, float2 c, float2 b, float r) {
+//     float2 q = abs(p - c) - b + r;
+//     return length(max(q, float2(0.0))) + min(max(q.x, q.y), 0.0) - r;
+// }
+//
+// float cro(float2 a, float2 b) { return a.x * b.y - a.y * b.x; }
+//
+// // Tapered capsule (iq): thick where it joins the body, thin at the tip.
+// float sdUnevenCapsule(float2 p, float2 pa, float2 pb, float ra, float rb) {
+//     p -= pa; pb -= pa;
+//     float h = dot(pb, pb);
+//     float2 q = float2(dot(p, float2(pb.y, -pb.x)), dot(p, pb)) / h;
+//     q.x = abs(q.x);
+//     float b = ra - rb;
+//     float2 c = float2(sqrt(max(h - b * b, 1e-4)), b);
+//     float k = cro(c, q);
+//     float m = dot(c, q);
+//     float n = dot(q, q);
+//     if (k < 0.0) return sqrt(h * n) - ra;
+//     if (k > c.x) return sqrt(h * (q.x * q.x + (q.y - 1.0) * (q.y - 1.0))) - rb;
+//     return m - ra;
+// }
+//
+// // Smooth value noise, measured in pixels, for organic unevenness.
+// float hash(float2 q) { return fract(sin(dot(q, float2(127.1, 311.7))) * 43758.5453); }
+// float vnoise(float2 q) {
+//     float2 i = floor(q); float2 f = fract(q);
+//     f = f * f * (3.0 - 2.0 * f);
+//     return mix(mix(hash(i), hash(i + float2(1.0, 0.0)), f.x),
+//                mix(hash(i + float2(0.0, 1.0)), hash(i + float2(1.0, 1.0)), f.x), f.y);
+// }
+//
+// // What the gel reflects: a soft studio, not lines. Two large irregular window
+// // lights up top, a bright sky gradient, coloured bounce from below.
+// float3 envLight(float3 r, float3 tint, float wob) {
+//     float sky = smoothstep(0.15, -0.65, r.y);
+//     // Long overhead softbox: becomes a glossy band riding the top curve.
+//     float2 w0 = (r.xy - float2(-0.08, -0.80)) / float2(0.95, 0.20);
+//     float win0 = exp(-pow(dot(w0, w0), 1.5) * (1.4 + wob * 0.8));
+//     // Big window upper-left, smaller one upper-right: uneven, like a real room.
+//     float2 w1 = (r.xy - float2(-0.62, -0.55)) / float2(0.30, 0.26);
+//     float win1 = exp(-pow(dot(w1, w1), 1.3) * (1.3 + wob));
+//     float2 w2 = (r.xy - float2(0.66, -0.50)) / float2(0.17, 0.15);
+//     float win2 = exp(-pow(dot(w2, w2), 1.5) * (1.8 - wob));
+//     float bounce = smoothstep(0.05, 0.75, r.y);
+//     return float3(1.0) * (win0 * 0.85 + win1 * 1.10 + win2 * 0.85 + sky * 0.14) + tint * bounce * 0.55;
+// }
+//
+// float smin(float a, float b, float k) {
+//     float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+//     return mix(b, a, h) - k * h * (1.0 - h);
+// }
+//
+// float radiusFor(float bh) { return min(bh * 0.5, 40.0 * dp); }
+//
+// float bodySdf(float2 p) {
+//     float W = size.x; float H = size.y;
+//     float t = 9.0 * dp;
+//     float x0 = sent > 0.5 ? 0.0 : t;
+//     float x1 = sent > 0.5 ? W - t : W;
+//     return sdRoundBox(p, float2((x0 + x1) * 0.5, H * 0.5), float2((x1 - x0) * 0.5, H * 0.5), radiusFor(H));
+// }
+//
+// float shapeSdf(float2 p) {
+//     float W = size.x; float H = size.y;
+//     float t = 9.0 * dp;
+//     float x0 = sent > 0.5 ? 0.0 : t;
+//     float x1 = sent > 0.5 ? W - t : W;
+//     float r = radiusFor(H);
+//     float d = sdRoundBox(p, float2((x0 + x1) * 0.5, H * 0.5), float2((x1 - x0) * 0.5, H * 0.5), r);
+//     // Stem grows out of the lower corner like a drip of the same gel.
+//     float sr = min(r * 0.55, 11.0 * dp);
+//     float stem;
+//     if (sent > 0.5) {
+//         stem = sdUnevenCapsule(p, float2(x1 - sr * 1.1, H - sr * 1.05), float2(W - 2.6 * dp, H - 2.4 * dp), sr, 2.4 * dp);
+//     } else {
+//         stem = sdUnevenCapsule(p, float2(x0 + sr * 1.1, H - sr * 1.05), float2(2.6 * dp, H - 2.4 * dp), sr, 2.4 * dp);
+//     }
+//     return smin(d, stem, 9.0 * dp);
+// }
+//
+// half4 main(float2 p) {
+//     float W = size.x; float H = size.y;
+//     float R = radiusFor(H);
+//
+//     float d = shapeSdf(p);
+//     float e = 1.0 * dp;
+//     float2 g = float2(shapeSdf(p + float2(e, 0.0)) - shapeSdf(p - float2(e, 0.0)),
+//                       shapeSdf(p + float2(0.0, e)) - shapeSdf(p - float2(0.0, e)));
+//     g = g / (length(g) + 1e-5);
+//
+//     // Inflated surface across the full radius.
+//     float s = clamp(-d / R, 0.0, 1.0);
+//     float z = sqrt(max(1.0 - (1.0 - s) * (1.0 - s), 1e-4));
+//     float slope = (1.0 - s) / z;
+//     float3 n = normalize(float3(g * slope, 1.0));
+//
+//     // Low-frequency wobble so nothing is perfectly even (pixel-scaled).
+//     float nz1 = vnoise(p / (22.0 * dp));
+//     float nz2 = vnoise(p / (9.0 * dp) + float2(7.3, 1.9));
+//     float wob = (nz1 - 0.5) * 0.9 + (nz2 - 0.5) * 0.35;
+//
+//     float3 base = clamp(baseColor, 0.02, 1.0);
+//     float3 absorb = -log(base);
+//     float3 glowC = clamp(base * 1.35 + float3(0.18), 0.0, 1.0);
+//
+//     // Body colour from how much gel the eye looks through: smooth, no bands.
+//     float thick = mix(2.4, 0.78, pow(z, 0.9));
+//     float3 col = mix(exp(-absorb * thick), base * mix(0.6, 1.05, z), 0.35);
+//
+//     // Light soaking through and gathering low and slightly to one side,
+//     // as one soft uneven glow rather than a ring.
+//     float vy = clamp(p.y / H, 0.0, 1.0);
+//     float2 gc = float2(W * (sent > 0.5 ? 0.42 : 0.58), H * 0.92);
+//     float2 gq = (p - gc) / float2(max(W * 0.55, 30.0 * dp), H * 0.55);
+//     float soak = exp(-dot(gq, gq)) * (0.75 + wob * 0.5);
+//     float down = smoothstep(-0.1, 0.9, n.y) * (1.0 - z * 0.6);
+//     col = mix(col, glowC, clamp(soak * 0.45 + down * 0.40, 0.0, 0.85));
+//
+//     // Top-lit roundness, kept gentle.
+//     float lam = dot(n, normalize(float3(-0.3, -0.7, 0.65)));
+//     col *= mix(0.80, 1.10, smoothstep(-0.4, 0.95, lam));
+//
+//     // Reflections come from the environment through the curved surface, so
+//     // they bend, pool and fade on their own; Fresnel makes the edges glossier.
+//     float3 rr = 2.0 * n.z * n - float3(0.0, 0.0, 1.0);
+//     float F = 0.06 + 0.94 * pow(1.0 - n.z, 4.0);
+//     float onStem = smoothstep(0.5 * dp, 4.0 * dp, bodySdf(p) - d);
+//     float3 refl = envLight(rr, glowC, wob);
+//     col += refl * mix(0.30, 1.0, F) * (1.0 - onStem * 0.7);
+//     col = clamp(col, 0.0, 1.0);
+//
+//     float cov = clamp(0.5 - d, 0.0, 1.0);
+//     float aIn = cov * mix(0.90, 0.97, z);
+//
+//     // Outside: contact shadow, coloured light cast below, wide soft halo.
+//     float ds = shapeSdf(p - float2(0.0, 2.5 * dp));
+//     float shadow = (1.0 - smoothstep(-3.0 * dp, 6.0 * dp, ds)) * 0.12;
+//     float dc = shapeSdf(p - float2(0.0, 5.0 * dp));
+//     float below = smoothstep(H * 0.35, H, p.y);
+//     float caustic = (1.0 - smoothstep(-6.0 * dp, 10.0 * dp, dc)) * 0.50 * below * (0.8 + wob * 0.4);
+//     float dh = shapeSdf(p - float2(0.0, 6.0 * dp));
+//     float halo = (1.0 - smoothstep(-2.0 * dp, 12.0 * dp, dh)) * 0.20;
+//     float outA = clamp(shadow + caustic + halo, 0.0, 1.0) * (1.0 - cov);
+//     float3 outRgb = glowC * (caustic + halo) * (1.0 - cov);
+//
+//     float3 rgb = col * aIn + outRgb * (1.0 - aIn);
+//     return half4(half3(rgb), half(clamp(aIn + outA * (1.0 - aIn), 0.0, 1.0)));
+// }
+// """
 
 // ---- v5 shader (commit 66a007b), kept for reference, no longer used ----
 //         private const val AGSL = """uniform float2 size;
