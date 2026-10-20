@@ -21,7 +21,7 @@ fun Context.getGelBubbleEffectiveColor(baseColor: Int): Int =
     baseColor.rotateHue(config.gelBubbleHueShift)
 
 /**
- * Gel bubble v8 (Oct 20, 2026): gel, not glass (softer-edged reflections, luminous
+ * Gel bubble v8 (Oct 19, 2026): gel, not glass (softer-edged reflections, luminous
  * internal scatter) and pillow inflation along the length, not just top-to-bottom.
  * Gel bubble v7 (Oct 19, 2026): reflected light sources have defined edges (soft
  * gaussian falloff read as airbrush); higher contrast between deep edges and core.
